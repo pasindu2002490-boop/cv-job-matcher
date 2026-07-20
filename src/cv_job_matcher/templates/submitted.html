@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CV submitted</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 28px; background: radial-gradient(circle at 20% 0%, #16316c, #070b19 46%); color: #f7faff; }
+    main { width: min(600px, 100%); padding: 36px; border: 1px solid #294a88; border-radius: 24px; background: rgba(10, 20, 45, .92); text-align: center; box-shadow: 0 24px 80px #0008; }
+    .icon { width: 72px; height: 72px; margin: auto; display: grid; place-items: center; border-radius: 50%; background: #153c69; color: #58e7ff; font-size: 34px; }
+    h1 { margin-bottom: 10px; }
+    p { color: #bdcae1; line-height: 1.6; }
+    #status { margin: 24px 0; padding: 16px; border-radius: 12px; background: #0d1931; color: #62e8bd; font-weight: 800; }
+    a { color: #55ddff; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="icon">✓</div>
+    <h1>Your search has started.</h1>
+    <p>Live job sources can take several minutes. The CSV reports will be emailed to <strong>{{ email }}</strong> when processing finishes.</p>
+    <div id="status">Queued…</div>
+    <a href="/">Submit another CV</a>
+  </main>
+  <script>
+    const statusUrl = {{ url_for('status', task_id=task_id) | tojson }};
+    const statusBox = document.getElementById('status');
+    async function refresh() {
+      try {
+        const response = await fetch(statusUrl);
+        const task = await response.json();
+        statusBox.textContent = task.message || task.status;
+        if (!['complete', 'failed'].includes(task.status)) setTimeout(refresh, 3000);
+      } catch (_) {
+        statusBox.textContent = 'Checking status…';
+        setTimeout(refresh, 5000);
+      }
+    }
+    refresh();
+  </script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+Jane Candidate
+jane@example.com
+https://www.linkedin.com/in/jane-candidate
+
+Summary
+Software engineer with 5 years of experience building Python APIs, React dashboards, SQL data pipelines, and cloud deployments.
+
+Experience
+Backend Engineer, ExampleCo
+- Built REST APIs with Python, FastAPI, PostgreSQL, and Docker.
+- Improved reporting dashboards using React and TypeScript.
+- Deployed services to AWS and maintained CI/CD pipelines.
+
+Skills
+Python, FastAPI, Django, JavaScript, TypeScript, React, SQL, PostgreSQL, Docker, AWS, Git, CI/CD, REST APIs
+
+Education
+BSc Computer Science
+

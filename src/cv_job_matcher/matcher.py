@@ -1,0 +1,153 @@
+from __future__ import annotations
+
+import re
+
+from .models import CandidateProfile, Job, MatchResult
+
+HIGH_VALUE_SKILLS = {
+    "aws",
+    "azure",
+    "c#",
+    "ci/cd",
+    "cloud",
+    "data analysis",
+    "data engineering",
+    "devops",
+    "django",
+    "docker",
+    "fastapi",
+    "java",
+    "javascript",
+    "kubernetes",
+    "langchain",
+    "linux",
+    "llm",
+    "machine learning",
+    "mlops",
+    "nlp",
+    "node",
+    "postgresql",
+    "python",
+    "rag",
+    "react",
+    "sql",
+    "typescript",
+}
+
+LOW_SIGNAL_SKILLS = {
+    "agile",
+    "communication",
+    "excel",
+    "finance",
+    "leadership",
+    "sales",
+    "scrum",
+}
+
+
+def rank_jobs(profile: CandidateProfile, jobs: list[Job], minimum_score: float = 20.0) -> list[MatchResult]:
+    results = [_score_job(profile, job) for job in jobs]
+    results = [result for result in results if result.score >= minimum_score]
+    return sorted(results, key=lambda item: item.score, reverse=True)
+
+
+def _score_job(profile: CandidateProfile, job: Job) -> MatchResult:
+    haystack = f"{job.title} {job.description}".lower()
+    title = job.title.lower()
+    matched_skills = tuple(skill for skill in profile.skills if _contains_term(haystack, skill))
+    matched_titles = tuple(term for term in profile.likely_titles if _contains_term(job.title.lower(), term))
+    strong_skills = tuple(skill for skill in matched_skills if skill in HIGH_VALUE_SKILLS)
+    low_signal_skills = tuple(skill for skill in matched_skills if skill in LOW_SIGNAL_SKILLS)
+    score = 0.0
+    score += min(len(strong_skills) * 12.0, 72.0)
+    score += min(len(low_signal_skills) * 2.0, 8.0)
+    score += min(len(matched_titles) * 16.0, 32.0)
+    score += _target_position_alignment(profile.target_position, title)
+    if _has_ai_profile(profile):
+        alignment = _ai_role_alignment(title)
+        score += alignment
+        if alignment < 0:
+            score -= 20.0
+    if job.published_at:
+        score += 5.0
+    if job.url:
+        score += 5.0
+    concerns = []
+    if any(term in haystack for term in ("visa", "work authorization", "security clearance", "native")):
+        concerns.append("Check eligibility requirements in the job description.")
+    senior_role = any(term in title for term in ("senior", "lead", "principal", "staff", "manager", "director"))
+    if senior_role and profile.experience_years is not None and profile.experience_years < 3:
+        score -= 20.0
+        concerns.append("Seniority may exceed the supplied experience years.")
+    elif senior_role and not any(
+        term in profile.raw_text.lower() for term in ("senior", "lead", "manager", "principal", "5 years", "6 years", "7 years")
+    ):
+        concerns.append("Seniority may need manual review.")
+    return MatchResult(
+        job=job,
+        score=round(min(score, 100.0), 1),
+        matched_skills=matched_skills,
+        matched_title_terms=matched_titles,
+        concerns=tuple(concerns),
+    )
+
+
+def _contains_term(text: str, term: str) -> bool:
+    escaped = re.escape(term.lower()).replace(r"\ ", r"\s+")
+    return bool(re.search(rf"(?<![a-z0-9+#]){escaped}(?![a-z0-9+#])", text))
+
+
+def _has_ai_profile(profile: CandidateProfile) -> bool:
+    ai_terms = {"ai/ml engineer", "ai engineer", "machine learning engineer"}
+    ai_skills = {"machine learning", "llm", "nlp", "rag", "mlops", "langchain"}
+    return bool(
+        ai_terms.intersection(profile.likely_titles)
+        or ai_skills.intersection(profile.skills)
+        or any(term in profile.target_position.lower() for term in ("ai", "machine learning", "ml", "llm"))
+    )
+
+
+def _target_position_alignment(position: str, title: str) -> float:
+    if not position:
+        return 0.0
+    target_tokens = [token for token in re.findall(r"[a-z0-9+#]+", position.lower()) if len(token) > 1]
+    if not target_tokens:
+        return 0.0
+    if position.lower().strip() in title:
+        return 30.0
+    overlap = sum(1 for token in target_tokens if re.search(rf"\b{re.escape(token)}\b", title))
+    if overlap == len(target_tokens):
+        return 24.0
+    if overlap:
+        return min(12.0, overlap * 6.0)
+    return -30.0
+
+
+def _ai_role_alignment(title: str) -> float:
+    title_text = f" {title} "
+    excluded = ("sales", "copywriter", "writer", "customer", "office assistant", "designer", "video editor")
+    if any(term in title_text for term in excluded):
+        return -65.0
+    exact_ai_engineer = (
+        "ai engineer",
+        "ai/ml engineer",
+        "ml engineer",
+        "machine learning engineer",
+        "llm engineer",
+        "rag engineer",
+        "nlp engineer",
+        "computer vision engineer",
+        "ai architect",
+    )
+    if any(term in title_text for term in exact_ai_engineer):
+        return 35.0
+    if "data scientist" in title_text or "applied scientist" in title_text:
+        return 25.0
+    if (
+        re.search(r"\bai\b", title_text)
+        or "machine learning" in title_text
+        or re.search(r"\bllm\b", title_text)
+        or re.search(r"\bml\b", title_text)
+    ):
+        return 15.0
+    return -45.0
