@@ -31,39 +31,57 @@ def apply_llm_filter(
         raise RuntimeError(f"LLM_LIMIT={limit} is too low to review all {len(matches)} matched jobs")
 
     reranked = []
+    blocked_jobs = 0
     batch_size = max(1, batch_size)
     for start in range(0, len(selected), batch_size):
-        batch = selected[start : start + batch_size]
-        try:
-            decisions = _call_llm(profile, batch, api_key, endpoint, selected_model)
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
-            detail = _error_detail(exc)
-            if strict:
-                raise RuntimeError(f"Required LLM filtering failed: {detail}") from exc
-            return matches, f"LLM filter: failed, deterministic ranking kept ({detail})"
-        by_url = {item.get("url", ""): item for item in decisions if isinstance(item, dict)}
-        for match in batch:
-            decision = by_url.get(match.job.url, {})
-            verdict = str(decision.get("decision", "reject" if strict else "keep")).lower()
-            if verdict == "reject" or (strict and verdict != "keep"):
-                continue
-            score = decision.get("score")
-            reason = str(decision.get("reason", "")).strip()
-            safe_score = float(score) if isinstance(score, (int, float)) else match.score
-            reranked.append(
-                replace(
-                    match,
-                    score=max(0.0, min(safe_score, 100.0)),
-                    llm_decision=verdict,
-                    llm_reason=reason,
+        pending = [selected[start : start + batch_size]]
+        while pending:
+            batch = pending.pop(0)
+            try:
+                decisions = _call_llm(profile, batch, api_key, endpoint, selected_model)
+            except HTTPError as exc:
+                # Groq/WAF can reject content from a particular listing. Split
+                # the batch to isolate it; a blocked single job fails closed.
+                if exc.code == 403 and len(batch) > 1:
+                    middle = len(batch) // 2
+                    pending[0:0] = [batch[:middle], batch[middle:]]
+                    continue
+                if exc.code == 403 and len(batch) == 1:
+                    blocked_jobs += 1
+                    continue
+                detail = _error_detail(exc)
+                if strict:
+                    raise RuntimeError(f"Required LLM filtering failed: {detail}") from exc
+                return matches, f"LLM filter: failed, deterministic ranking kept ({detail})"
+            except (URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
+                detail = _error_detail(exc)
+                if strict:
+                    raise RuntimeError(f"Required LLM filtering failed: {detail}") from exc
+                return matches, f"LLM filter: failed, deterministic ranking kept ({detail})"
+            by_url = {item.get("url", ""): item for item in decisions if isinstance(item, dict)}
+            for match in batch:
+                decision = by_url.get(match.job.url, {})
+                verdict = str(decision.get("decision", "reject" if strict else "keep")).lower()
+                if verdict == "reject" or (strict and verdict != "keep"):
+                    continue
+                score = decision.get("score")
+                reason = str(decision.get("reason", "")).strip()
+                safe_score = float(score) if isinstance(score, (int, float)) else match.score
+                reranked.append(
+                    replace(
+                        match,
+                        score=max(0.0, min(safe_score, 100.0)),
+                        llm_decision=verdict,
+                        llm_reason=reason,
+                    )
                 )
-            )
     kept_urls = {match.job.url for match in reranked}
     if not strict:
         reranked.extend(match for match in matches[len(selected) :] if match.job.url not in kept_urls)
     return (
         sorted(reranked, key=lambda item: item.score, reverse=True),
-        f"LLM filter: reviewed {len(selected)} job(s) with {provider_name} / {selected_model}",
+        f"LLM filter: reviewed {len(selected)} job(s) with {provider_name} / {selected_model}"
+        + (f"; rejected {blocked_jobs} provider-blocked job(s)" if blocked_jobs else ""),
     )
 
 
@@ -119,7 +137,6 @@ def _call_llm(
             "target_position": profile.target_position,
             "experience_years": profile.experience_years,
             "skills": list(profile.skills),
-            "cv_excerpt": profile.raw_text[:4000],
         },
         "task": (
             "Act as a strict eligibility gate, not a recommendation assistant. The supplied experience_years "
