@@ -22,25 +22,37 @@ $env:GROQ_MODEL = "openai/gpt-oss-20b"
 $env:LLM_LIMIT = "500"
 $env:LLM_BATCH_SIZE = "15"
 
-$securePassword = Read-Host "Paste the Gmail App Password" -AsSecureString
-$passwordPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
-try {
-    $env:SMTP_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($passwordPointer)
-}
-finally {
-    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($passwordPointer)
-    Remove-Variable securePassword, passwordPointer -ErrorAction SilentlyContinue
+$secretsFile = Join-Path $PSScriptRoot ".env"
+if (Test-Path -LiteralPath $secretsFile) {
+    foreach ($line in Get-Content -LiteralPath $secretsFile) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith("#")) { continue }
+        $parts = $trimmed.Split("=", 2)
+        if ($parts.Count -eq 2) {
+            [Environment]::SetEnvironmentVariable($parts[0].Trim(), $parts[1].Trim(), "Process")
+        }
+    }
+    Write-Host "Loaded local configuration from .env" -ForegroundColor Green
 }
 
-$secureGroqKey = Read-Host "Paste the Groq API key" -AsSecureString
-$groqKeyPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureGroqKey)
-try {
-    $env:GROQ_API_KEY = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($groqKeyPointer)
+function Read-SecretEnvironmentValue([string]$Name, [string]$Prompt) {
+    if ([Environment]::GetEnvironmentVariable($Name, "Process")) { return }
+    $secureValue = Read-Host $Prompt -AsSecureString
+    $valuePointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureValue)
+    try {
+        [Environment]::SetEnvironmentVariable(
+            $Name,
+            [Runtime.InteropServices.Marshal]::PtrToStringBSTR($valuePointer),
+            "Process"
+        )
+    }
+    finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($valuePointer)
+    }
 }
-finally {
-    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($groqKeyPointer)
-    Remove-Variable secureGroqKey, groqKeyPointer -ErrorAction SilentlyContinue
-}
+
+Read-SecretEnvironmentValue "SMTP_PASSWORD" "Paste the Gmail App Password"
+Read-SecretEnvironmentValue "GROQ_API_KEY" "Paste the Groq API key"
 
 Write-Host "Starting CV Job Matcher at http://127.0.0.1:$Port" -ForegroundColor Cyan
 Write-Host "Strict experience filtering and Groq review are enabled." -ForegroundColor Green
