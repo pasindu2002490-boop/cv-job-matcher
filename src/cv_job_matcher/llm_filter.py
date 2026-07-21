@@ -26,9 +26,10 @@ def apply_llm_filter(
         if strict:
             raise RuntimeError(f"{provider} LLM filtering is required but its API key is not configured")
         return matches, "LLM filter: skipped (OPENAI_API_KEY or GROQ_API_KEY is not configured)"
-    selected = matches[: max(1, limit)]
-    if strict and len(matches) > len(selected):
-        raise RuntimeError(f"LLM_LIMIT={limit} is too low to review all {len(matches)} matched jobs")
+    # Strict mode is the website's final eligibility gate, so every result from
+    # the normal matcher must be reviewed. The limit remains available only for
+    # optional/non-strict CLI use.
+    selected = matches if strict else matches[: max(1, limit)]
 
     reranked = []
     blocked_jobs = 0
@@ -126,7 +127,7 @@ def _call_llm(
             "company": match.job.company,
             "location": match.job.location,
             "source": match.job.source,
-            "description": match.job.description[:1800],
+            "description": match.job.description[:700],
             "heuristic_score": match.score,
             "concerns": list(match.concerns),
         }
@@ -137,6 +138,7 @@ def _call_llm(
             "target_position": profile.target_position,
             "experience_years": profile.experience_years,
             "skills": list(profile.skills),
+            "cv_text": profile.raw_text[:6000],
         },
         "task": (
             "Act as a strict eligibility gate, not a recommendation assistant. The supplied experience_years "

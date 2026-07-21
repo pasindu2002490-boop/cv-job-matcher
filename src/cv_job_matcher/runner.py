@@ -27,7 +27,7 @@ class RunOptions:
     llm_provider: str = "auto"
     llm_limit: int = 80
     llm_strict: bool = False
-    llm_batch_size: int = 15
+    llm_batch_size: int = 10
     limit_per_source: int = 50
     minimum_score: float = 40.0
     find_contacts: bool = False

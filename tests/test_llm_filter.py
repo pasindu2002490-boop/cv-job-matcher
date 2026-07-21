@@ -22,7 +22,8 @@ def test_strict_llm_filter_batches_every_job_and_drops_maybe(monkeypatch):
         ]
 
     monkeypatch.setattr(llm_filter, "_call_llm", fake_call)
-    kept, note = llm_filter.apply_llm_filter(profile, matches, True, "model", 10, "groq", True, 2)
+    # Strict mode reviews all jobs even when the optional CLI limit is lower.
+    kept, note = llm_filter.apply_llm_filter(profile, matches, True, "model", 2, "groq", True, 2)
 
     assert len(reviewed) == 5
     assert len(kept) == 4

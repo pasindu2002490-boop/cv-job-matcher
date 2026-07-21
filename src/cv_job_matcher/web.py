@@ -152,7 +152,7 @@ def _process_submission(
             llm_model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
             llm_limit=int(os.getenv("LLM_LIMIT", "500")),
             llm_strict=True,
-            llm_batch_size=int(os.getenv("LLM_BATCH_SIZE", "15")),
+            llm_batch_size=int(os.getenv("LLM_BATCH_SIZE", "10")),
         ))
         _set_task(task_id, status="emailing", message="Preparing and sending your CSV reports.")
         send_results_email(email, summary)

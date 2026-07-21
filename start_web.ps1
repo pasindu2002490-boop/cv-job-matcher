@@ -20,7 +20,7 @@ $env:SMTP_USE_SSL = "0"
 $env:WEB_PORT = $Port.ToString()
 $env:GROQ_MODEL = "openai/gpt-oss-20b"
 $env:LLM_LIMIT = "500"
-$env:LLM_BATCH_SIZE = "15"
+$env:LLM_BATCH_SIZE = "10"
 
 $secretsFile = Join-Path $PSScriptRoot ".env"
 if (Test-Path -LiteralPath $secretsFile) {
