@@ -61,8 +61,9 @@ python -m pip install -e .
 ## Web form with automatic email delivery
 
 The web application lets a user upload a CV, enter an email address, target country,
-position, and experience years. Matching runs in a background worker and all generated
-CSV reports are sent to the supplied email address.
+position, and experience years. A hard experience gate first removes roles above the
+candidate's entered experience. Groq then strictly checks every remaining job for
+experience and target-field fit before the CSV reports are emailed.
 
 Install the project and configure SMTP settings. For Gmail, use an app password rather
 than the normal account password:
@@ -74,6 +75,8 @@ $env:SMTP_USERNAME="your-account@gmail.com"
 $env:SMTP_PASSWORD="your-app-password"
 $env:SMTP_FROM="your-account@gmail.com"
 $env:SMTP_USE_TLS="1"
+$env:GROQ_API_KEY="your-groq-api-key"
+$env:GROQ_MODEL="openai/gpt-oss-20b"
 ```
 
 Start the web application:
@@ -88,8 +91,9 @@ On Windows, the secure launcher is easier and avoids storing the App Password in
 .\start_web.ps1 -Email "your-account@gmail.com"
 ```
 
-It prompts for the Gmail App Password and starts the server with SMTP configured in
-the same process. Keep that PowerShell window open while searches are running.
+It securely prompts for both the Gmail App Password and Groq API key, then starts the
+server with both configured in the same process. Keep that PowerShell window open
+while searches are running. Create a Groq key at `https://console.groq.com/keys`.
 
 Then open `http://127.0.0.1:8000`. Uploaded CV files are deleted after each run.
 Generated reports remain under `web_data/results/<task-id>` by default. Configure
@@ -109,8 +113,8 @@ not suitable because this application requires server-side Python and background
 2. Sign in to Render and choose **New > Blueprint**.
 3. Connect the GitHub repository and select its `render.yaml` Blueprint.
 4. Enter secret values when Render requests them:
-   `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_FROM`. Optionally configure the
-   search-provider keys declared in `render.yaml`.
+   `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, and `GROQ_API_KEY`. Optionally
+   configure the search-provider keys declared in `render.yaml`.
 5. Deploy. Render assigns an HTTPS `onrender.com` URL and redeploys after pushes to
    the connected GitHub branch.
 

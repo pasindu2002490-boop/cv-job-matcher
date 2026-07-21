@@ -51,6 +51,48 @@ def rank_jobs(profile: CandidateProfile, jobs: list[Job], minimum_score: float =
     return sorted(results, key=lambda item: item.score, reverse=True)
 
 
+def filter_experience_compatible(
+    profile: CandidateProfile, matches: list[MatchResult]
+) -> tuple[list[MatchResult], int]:
+    """Remove jobs whose title or stated requirement exceeds supplied experience."""
+    if profile.experience_years is None:
+        return matches, 0
+    kept = []
+    for match in matches:
+        required = required_experience_years(match.job)
+        if required is None or required <= profile.experience_years:
+            kept.append(match)
+    return kept, len(matches) - len(kept)
+
+
+def required_experience_years(job: Job) -> float | None:
+    """Return a conservative minimum based on title seniority and explicit text."""
+    title = job.title.lower()
+    entry_terms = ("intern", "trainee", "graduate", "junior", "entry level", "entry-level")
+    title_minimum = 0.0 if any(term in title for term in entry_terms) else None
+    seniority_rules = (
+        (r"\b(?:vice president|vp|director|head of|chief)\b", 7.0),
+        (r"\b(?:principal|staff|architect|manager)\b", 5.0),
+        (r"\b(?:lead|senior|sr\.?)(?:\s|$)", 3.0),
+    )
+    if title_minimum is None:
+        for pattern, years in seniority_rules:
+            if re.search(pattern, title):
+                title_minimum = years
+                break
+
+    text = f"{job.title}. {job.description}".lower()
+    explicit = []
+    patterns = (
+        r"(?:minimum|min\.?|at least|requires?|required|with)\s+(\d+(?:\.\d+)?)\+?\s*(?:-|to)?\s*\d*\s*years?",
+        r"(\d+(?:\.\d+)?)\+?\s*(?:-|to)?\s*\d*\s*years?\s+(?:of\s+)?(?:relevant\s+|professional\s+)?experience",
+    )
+    for pattern in patterns:
+        explicit.extend(float(value) for value in re.findall(pattern, text) if float(value) <= 60)
+    requirements = explicit + ([title_minimum] if title_minimum is not None else [])
+    return max(requirements) if requirements else None
+
+
 def _score_job(profile: CandidateProfile, job: Job) -> MatchResult:
     haystack = f"{job.title} {job.description}".lower()
     title = job.title.lower()

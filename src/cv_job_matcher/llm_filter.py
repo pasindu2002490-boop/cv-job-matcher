@@ -15,46 +15,63 @@ def apply_llm_filter(
     enabled: bool,
     model: str,
     limit: int,
+    provider: str = "auto",
+    strict: bool = False,
+    batch_size: int = 15,
 ) -> tuple[list[MatchResult], str]:
     if not enabled:
         return matches, ""
-    provider, api_key, endpoint, selected_model = _resolve_llm_config(model)
+    provider_name, api_key, endpoint, selected_model = _resolve_llm_config(model, provider)
     if not api_key:
+        if strict:
+            raise RuntimeError(f"{provider} LLM filtering is required but its API key is not configured")
         return matches, "LLM filter: skipped (OPENAI_API_KEY or GROQ_API_KEY is not configured)"
     selected = matches[: max(1, limit)]
-    try:
-        decisions = _call_llm(profile, selected, api_key, endpoint, selected_model)
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
-        return matches, f"LLM filter: failed, deterministic ranking kept ({exc})"
+    if strict and len(matches) > len(selected):
+        raise RuntimeError(f"LLM_LIMIT={limit} is too low to review all {len(matches)} matched jobs")
 
-    by_url = {item.get("url", ""): item for item in decisions if isinstance(item, dict)}
     reranked = []
-    for match in selected:
-        decision = by_url.get(match.job.url, {})
-        keep = str(decision.get("decision", "keep")).lower()
-        if keep == "reject":
-            continue
-        score = decision.get("score")
-        reason = str(decision.get("reason", "")).strip()
-        reranked.append(
-            replace(
-                match,
-                score=float(score) if isinstance(score, (int, float)) else match.score,
-                llm_decision=keep,
-                llm_reason=reason,
+    batch_size = max(1, batch_size)
+    for start in range(0, len(selected), batch_size):
+        batch = selected[start : start + batch_size]
+        try:
+            decisions = _call_llm(profile, batch, api_key, endpoint, selected_model)
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
+            if strict:
+                raise RuntimeError(f"Required LLM filtering failed: {exc}") from exc
+            return matches, f"LLM filter: failed, deterministic ranking kept ({exc})"
+        by_url = {item.get("url", ""): item for item in decisions if isinstance(item, dict)}
+        for match in batch:
+            decision = by_url.get(match.job.url, {})
+            verdict = str(decision.get("decision", "reject" if strict else "keep")).lower()
+            if verdict == "reject" or (strict and verdict != "keep"):
+                continue
+            score = decision.get("score")
+            reason = str(decision.get("reason", "")).strip()
+            safe_score = float(score) if isinstance(score, (int, float)) else match.score
+            reranked.append(
+                replace(
+                    match,
+                    score=max(0.0, min(safe_score, 100.0)),
+                    llm_decision=verdict,
+                    llm_reason=reason,
+                )
             )
-        )
     kept_urls = {match.job.url for match in reranked}
-    reranked.extend(match for match in matches[len(selected) :] if match.job.url not in kept_urls)
+    if not strict:
+        reranked.extend(match for match in matches[len(selected) :] if match.job.url not in kept_urls)
     return (
         sorted(reranked, key=lambda item: item.score, reverse=True),
-        f"LLM filter: applied with {provider} / {selected_model}",
+        f"LLM filter: reviewed {len(selected)} job(s) with {provider_name} / {selected_model}",
     )
 
 
-def _resolve_llm_config(model: str) -> tuple[str, str, str, str]:
+def _resolve_llm_config(model: str, provider: str = "auto") -> tuple[str, str, str, str]:
+    provider = provider.strip().lower()
+    if provider not in {"auto", "openai", "groq"}:
+        raise ValueError("LLM provider must be auto, openai, or groq")
     openai_key = os.getenv("OPENAI_API_KEY", "").strip()
-    if openai_key:
+    if openai_key and provider in {"auto", "openai"}:
         return (
             "OpenAI",
             openai_key,
@@ -63,7 +80,7 @@ def _resolve_llm_config(model: str) -> tuple[str, str, str, str]:
         )
 
     groq_key = os.getenv("GROQ_API_KEY", "").strip()
-    if groq_key:
+    if groq_key and provider in {"auto", "groq"}:
         groq_model = os.getenv("GROQ_MODEL", "").strip()
         selected_model = groq_model or (model if model != "gpt-4.1-mini" else "openai/gpt-oss-20b")
         return (
@@ -73,7 +90,7 @@ def _resolve_llm_config(model: str) -> tuple[str, str, str, str]:
             selected_model,
         )
 
-    return "", "", "", model
+    return provider.title() if provider != "auto" else "", "", "", model
 
 
 def _call_llm(
@@ -104,9 +121,14 @@ def _call_llm(
             "cv_excerpt": profile.raw_text[:4000],
         },
         "task": (
-            "Filter and rerank jobs ONLY by CV fit, target position fit, and experience years. "
-            "Reject jobs that clearly require more seniority than supplied experience, are not related "
-            "to the target position, or are obviously not real/open job listings. Return JSON only."
+            "Act as a strict eligibility gate, not a recommendation assistant. The supplied experience_years "
+            "is the candidate's maximum verified professional experience; never infer extra years from skills "
+            "or the CV. REJECT any job whose title, duties, or stated minimum experience exceeds it. For a "
+            "candidate below 3 years reject Senior/Sr/Lead roles; below 5 reject Staff/Principal/Manager/Architect; "
+            "below 7 reject Director/Head/VP/Chief roles. REJECT jobs outside target_position, non-job/search pages, "
+            "and unclear matches. KEEP only a clearly suitable, currently open role in the requested field. "
+            "Use maybe only for genuine ambiguity; strict callers will exclude maybe. Return one result for every "
+            "input URL and JSON only."
         ),
         "jobs": jobs,
         "output_schema": [

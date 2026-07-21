@@ -57,6 +57,11 @@ def create_app(test_config: dict | None = None) -> Flask:
                 "index.html",
                 error=f"Email delivery is not configured: {exc}",
             ), 503
+        if not os.getenv("GROQ_API_KEY", "").strip():
+            return render_template(
+                "index.html",
+                error="Groq filtering is not configured. Set GROQ_API_KEY and restart the server.",
+            ), 503
 
         task_id = uuid4().hex
         extension = Path(secure_filename(upload.filename or "cv")).suffix.lower()
@@ -142,6 +147,12 @@ def _process_submission(
             out_dir=output_dir,
             include_remote_global=include_remote_global,
             web_discovery=web_discovery,
+            llm_filter=True,
+            llm_provider="groq",
+            llm_model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
+            llm_limit=int(os.getenv("LLM_LIMIT", "500")),
+            llm_strict=True,
+            llm_batch_size=int(os.getenv("LLM_BATCH_SIZE", "15")),
         ))
         _set_task(task_id, status="emailing", message="Preparing and sending your CSV reports.")
         send_results_email(email, summary)

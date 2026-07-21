@@ -9,7 +9,7 @@ from .cv_parser import parse_cv, read_cv
 from .cv_writer import build_tailored_cv
 from .job_sources import search_all
 from .llm_filter import apply_llm_filter
-from .matcher import rank_jobs
+from .matcher import filter_experience_compatible, rank_jobs
 from .report import write_outputs
 
 
@@ -24,7 +24,10 @@ class RunOptions:
     web_discovery: bool = False
     llm_filter: bool = False
     llm_model: str = "gpt-4.1-mini"
+    llm_provider: str = "auto"
     llm_limit: int = 80
+    llm_strict: bool = False
+    llm_batch_size: int = 15
     limit_per_source: int = 50
     minimum_score: float = 40.0
     find_contacts: bool = False
@@ -61,12 +64,20 @@ def run_match(options: RunOptions) -> RunSummary:
         web_discovery=options.web_discovery,
     )
     matches = rank_jobs(profile, jobs, options.minimum_score)
+    matches, experience_rejections = filter_experience_compatible(profile, matches)
+    if experience_rejections:
+        provider_notes.append(
+            f"Experience filter: rejected {experience_rejections} over-senior job(s)"
+        )
     matches, llm_note = apply_llm_filter(
         profile,
         matches,
         enabled=options.llm_filter,
         model=options.llm_model,
         limit=options.llm_limit,
+        provider=options.llm_provider,
+        strict=options.llm_strict,
+        batch_size=options.llm_batch_size,
     )
     if llm_note:
         provider_notes.append(llm_note)
