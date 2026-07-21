@@ -194,6 +194,9 @@ def _post_chat_completion(endpoint: str, api_key: str, body: dict) -> list[dict]
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "Accept": "application/json",
+            # urllib's default signature is blocked by Groq's Cloudflare rules
+            # (Error 1010) on some Windows connections.
+            "User-Agent": "cv-job-matcher/0.1",
         },
         method="POST",
     )
