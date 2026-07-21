@@ -65,7 +65,17 @@ def apply_llm_filter(
                 if strict:
                     raise RuntimeError(f"Required LLM filtering failed: {detail}") from exc
                 return matches, f"LLM filter: failed, deterministic ranking kept ({detail})"
-            except (URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
+            except ValueError as exc:
+                # A model can occasionally return a malformed structure even
+                # under JSON mode. Isolate and fail closed instead of aborting
+                # every otherwise valid batch in the customer run.
+                if len(batch) > 1:
+                    middle = len(batch) // 2
+                    pending[0:0] = [batch[:middle], batch[middle:]]
+                    continue
+                blocked_jobs += 1
+                continue
+            except (URLError, TimeoutError) as exc:
                 detail = _error_detail(exc)
                 if strict:
                     raise RuntimeError(f"Required LLM filtering failed: {detail}") from exc
@@ -169,7 +179,34 @@ def _call_llm(
     body = {
         "model": model,
         "temperature": 0,
-        "response_format": {"type": "json_object"},
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "job_filter_results",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "jobs": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "url": {"type": "string"},
+                                    "decision": {"type": "string", "enum": ["keep", "maybe", "reject"]},
+                                    "score": {"type": "number", "minimum": 0, "maximum": 100},
+                                    "reason": {"type": "string"},
+                                },
+                                "required": ["url", "decision", "score", "reason"],
+                                "additionalProperties": False,
+                            },
+                        }
+                    },
+                    "required": ["jobs"],
+                    "additionalProperties": False,
+                },
+            },
+        },
         "messages": [
             {
                 "role": "system",
@@ -240,7 +277,9 @@ def _post_chat_completion(endpoint: str, api_key: str, body: dict) -> list[dict]
     )
     with urlopen(request, timeout=90) as response:
         payload = json.loads(response.read().decode("utf-8", errors="replace"))
-    content = payload["choices"][0]["message"]["content"]
+    content = payload["choices"][0]["message"]["content"].strip()
+    if content.startswith("```"):
+        content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content, flags=re.I)
     parsed = json.loads(content)
     if isinstance(parsed, dict) and isinstance(parsed.get("jobs"), list):
         return parsed["jobs"]
@@ -248,4 +287,6 @@ def _post_chat_completion(endpoint: str, api_key: str, body: dict) -> list[dict]
         return parsed["results"]
     if isinstance(parsed, list):
         return parsed
+    if isinstance(parsed, dict) and all(isinstance(value, dict) for value in parsed.values()):
+        return [{"url": url, **value} for url, value in parsed.items()]
     raise ValueError("LLM response did not contain a jobs/results list")
