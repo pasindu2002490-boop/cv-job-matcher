@@ -37,9 +37,10 @@ def apply_llm_filter(
         try:
             decisions = _call_llm(profile, batch, api_key, endpoint, selected_model)
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
+            detail = _error_detail(exc)
             if strict:
-                raise RuntimeError(f"Required LLM filtering failed: {exc}") from exc
-            return matches, f"LLM filter: failed, deterministic ranking kept ({exc})"
+                raise RuntimeError(f"Required LLM filtering failed: {detail}") from exc
+            return matches, f"LLM filter: failed, deterministic ranking kept ({detail})"
         by_url = {item.get("url", ""): item for item in decisions if isinstance(item, dict)}
         for match in batch:
             decision = by_url.get(match.job.url, {})
@@ -147,14 +148,23 @@ def _call_llm(
             {"role": "user", "content": json.dumps(prompt, ensure_ascii=True)},
         ],
     }
+    return _post_chat_completion(endpoint, api_key, body)
+
+
+def _error_detail(exc: Exception) -> str:
+    if not isinstance(exc, HTTPError):
+        return str(exc)
     try:
-        return _post_chat_completion(endpoint, api_key, body)
-    except HTTPError:
-        # Some OpenAI-compatible providers/models do not support JSON-mode. The
-        # prompt still requires JSON, so retry once without the optional hint.
-        fallback = dict(body)
-        fallback.pop("response_format", None)
-        return _post_chat_completion(endpoint, api_key, fallback)
+        payload = json.loads(exc.read().decode("utf-8", errors="replace"))
+        error = payload.get("error", {}) if isinstance(payload, dict) else {}
+        message = error.get("message") if isinstance(error, dict) else ""
+        code = error.get("code") if isinstance(error, dict) else ""
+        if message:
+            suffix = f" ({code})" if code else ""
+            return f"Groq HTTP {exc.code}: {message}{suffix}"
+    except (json.JSONDecodeError, OSError):
+        pass
+    return f"Groq HTTP {exc.code}: {exc.reason}"
 
 
 def _post_chat_completion(endpoint: str, api_key: str, body: dict) -> list[dict]:
