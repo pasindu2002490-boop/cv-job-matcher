@@ -129,7 +129,6 @@ def _validate_submission(upload, email: str, country: str, position: str, experi
     if not position:
         return "Enter your target position."
     try:
-        logger.info("Submission %s started", task_id)
         experience = float(experience_raw)
     except ValueError:
         return "Experience must be a number."
@@ -155,6 +154,7 @@ def _process_submission(
     web_discovery: bool,
 ) -> None:
     try:
+        logger.info("Submission %s started", task_id)
         _set_task(task_id, status="running", message="Searching and matching live jobs.")
         summary = run_match(RunOptions(
             cv_path=cv_path,

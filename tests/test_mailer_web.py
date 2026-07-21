@@ -2,7 +2,7 @@ from pathlib import Path
 
 from cv_job_matcher.mailer import build_results_message
 from cv_job_matcher.runner import RunSummary
-from cv_job_matcher.web import create_app
+from cv_job_matcher.web import _validate_submission, create_app
 
 
 def test_results_email_attaches_all_csv_files(tmp_path: Path) -> None:
@@ -69,3 +69,10 @@ def test_web_form_rejects_invalid_email(tmp_path: Path) -> None:
 
     assert response.status_code == 400
     assert b"valid email address" in response.data
+
+
+def test_valid_submission_fields_pass_validation() -> None:
+    class Upload:
+        filename = "candidate.pdf"
+
+    assert _validate_submission(Upload(), "person@example.com", "Sri Lanka", "DevOps Engineer", "1") == ""
