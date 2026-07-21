@@ -49,7 +49,10 @@ def build_results_message(recipient: str, summary: RunSummary) -> EmailMessage:
         "The generated CSV reports are attached. Always verify eligibility and vacancy "
         "availability on the employer's official application page.\n"
     )
-    for path in sorted(summary.output_dir.glob("*.csv")):
+    for filename in ("all_discovered_jobs.csv", "job_matches.csv"):
+        path = summary.output_dir / filename
+        if not path.is_file():
+            continue
         content_type, _ = mimetypes.guess_type(path.name)
         maintype, subtype = (content_type or "text/csv").split("/", 1)
         message.add_attachment(

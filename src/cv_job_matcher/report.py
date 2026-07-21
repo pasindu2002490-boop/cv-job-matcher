@@ -52,12 +52,14 @@ def write_outputs(
 ) -> None:
     contact_leads = contact_leads or []
     out_dir.mkdir(parents=True, exist_ok=True)
+    # These legacy CSVs are no longer part of the public report set. Remove
+    # stale copies when a caller reuses an existing output directory.
+    for legacy_name in ("companies_hiring.csv", "company_contacts.csv"):
+        (out_dir / legacy_name).unlink(missing_ok=True)
     (out_dir / "tailored_cv.md").write_text(tailored_cv, encoding="utf-8")
     _write_all_jobs_csv(out_dir / "all_discovered_jobs.csv", jobs)
     contact_by_company = _best_contact_by_company(contact_leads)
     _write_csv(out_dir / "job_matches.csv", matches, contact_by_company)
-    _write_companies_csv(out_dir / "companies_hiring.csv", matches, contact_by_company)
-    _write_contacts_csv(out_dir / "company_contacts.csv", contact_leads)
     (out_dir / "job_matches.md").write_text(
         _build_markdown_report(profile, country, matches, provider_notes),
         encoding="utf-8",

@@ -7,14 +7,15 @@ from cv_job_matcher.web import create_app
 
 def test_results_email_attaches_all_csv_files(tmp_path: Path) -> None:
     (tmp_path / "job_matches.csv").write_text("title\nAI Engineer\n", encoding="utf-8")
-    (tmp_path / "companies_hiring.csv").write_text("company\nExample\n", encoding="utf-8")
+    (tmp_path / "all_discovered_jobs.csv").write_text("title\nAI Engineer\n", encoding="utf-8")
+    (tmp_path / "companies_hiring.csv").write_text("company\nLegacy\n", encoding="utf-8")
     (tmp_path / "notes.md").write_text("not attached", encoding="utf-8")
     summary = RunSummary("sri lanka", "Test User", 10, 2, 0, tmp_path)
 
     message = build_results_message("person@example.com", summary)
 
     filenames = sorted(part.get_filename() for part in message.iter_attachments())
-    assert filenames == ["companies_hiring.csv", "job_matches.csv"]
+    assert filenames == ["all_discovered_jobs.csv", "job_matches.csv"]
     assert message["To"] == "person@example.com"
 
 
