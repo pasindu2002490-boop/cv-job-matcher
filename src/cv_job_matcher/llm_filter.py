@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import time
 from dataclasses import replace
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -17,7 +19,7 @@ def apply_llm_filter(
     limit: int,
     provider: str = "auto",
     strict: bool = False,
-    batch_size: int = 15,
+    batch_size: int = 5,
 ) -> tuple[list[MatchResult], str]:
     if not enabled:
         return matches, ""
@@ -38,8 +40,17 @@ def apply_llm_filter(
         pending = [selected[start : start + batch_size]]
         while pending:
             batch = pending.pop(0)
+            rate_attempts = 0
             try:
-                decisions = _call_llm(profile, batch, api_key, endpoint, selected_model)
+                while True:
+                    try:
+                        decisions = _call_llm(profile, batch, api_key, endpoint, selected_model)
+                        break
+                    except HTTPError as exc:
+                        if exc.code != 429 or rate_attempts >= 6:
+                            raise
+                        rate_attempts += 1
+                        time.sleep(_rate_limit_wait(exc))
             except HTTPError as exc:
                 # Groq/WAF can reject content from a particular listing. Split
                 # the batch to isolate it; a blocked single job fails closed.
@@ -173,6 +184,9 @@ def _call_llm(
 def _error_detail(exc: Exception) -> str:
     if not isinstance(exc, HTTPError):
         return str(exc)
+    cached = getattr(exc, "_cv_job_matcher_detail", "")
+    if cached:
+        return cached
     try:
         payload = json.loads(exc.read().decode("utf-8", errors="replace"))
         error = payload.get("error", {}) if isinstance(payload, dict) else {}
@@ -184,6 +198,30 @@ def _error_detail(exc: Exception) -> str:
     except (json.JSONDecodeError, OSError):
         pass
     return f"Groq HTTP {exc.code}: {exc.reason}"
+
+
+def _rate_limit_wait(exc: HTTPError) -> float:
+    """Read Groq's retry hint and return a bounded wait in seconds."""
+    raw = exc.read().decode("utf-8", errors="replace")
+    detail = f"Groq HTTP {exc.code}: {exc.reason}"
+    try:
+        payload = json.loads(raw)
+        error = payload.get("error", {}) if isinstance(payload, dict) else {}
+        message = error.get("message", "") if isinstance(error, dict) else ""
+        code = error.get("code", "") if isinstance(error, dict) else ""
+        if message:
+            detail = f"Groq HTTP {exc.code}: {message}" + (f" ({code})" if code else "")
+    except json.JSONDecodeError:
+        message = raw
+    setattr(exc, "_cv_job_matcher_detail", detail)
+
+    retry_header = exc.headers.get("Retry-After", "") if exc.headers else ""
+    try:
+        seconds = float(retry_header)
+    except ValueError:
+        match = re.search(r"try again in\s+([0-9.]+)s", message, flags=re.IGNORECASE)
+        seconds = float(match.group(1)) if match else 20.0
+    return min(max(seconds + 1.0, 1.0), 60.0)
 
 
 def _post_chat_completion(endpoint: str, api_key: str, body: dict) -> list[dict]:
