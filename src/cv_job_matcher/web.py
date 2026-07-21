@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import logging
 import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -13,6 +14,12 @@ from werkzeug.utils import secure_filename
 
 from .mailer import MailSettings, send_results_email
 from .runner import RunOptions, run_match
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
@@ -78,6 +85,15 @@ def create_app(test_config: dict | None = None) -> Flask:
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
 
+        logger.info(
+            "Submission %s queued: recipient=%s position=%s country=%s experience=%s",
+            task_id,
+            email,
+            position,
+            country,
+            experience_raw,
+        )
+
         EXECUTOR.submit(
             _process_submission,
             task_id,
@@ -113,6 +129,7 @@ def _validate_submission(upload, email: str, country: str, position: str, experi
     if not position:
         return "Enter your target position."
     try:
+        logger.info("Submission %s started", task_id)
         experience = float(experience_raw)
     except ValueError:
         return "Experience must be a number."
@@ -164,7 +181,9 @@ def _process_submission(
             matches=summary.matches_written,
             completed_at=datetime.now(timezone.utc).isoformat(),
         )
+        logger.info("Submission %s completed successfully", task_id)
     except Exception as exc:
+        logger.exception("Submission %s failed: %s", task_id, exc)
         _set_task(task_id, status="failed", message=str(exc))
     finally:
         try:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import logging
 from pathlib import Path
 
 from .contact_finder import enrich_company_contacts
@@ -11,6 +12,8 @@ from .job_sources import search_all
 from .llm_filter import apply_llm_filter
 from .matcher import filter_experience_compatible, rank_jobs
 from .report import write_outputs
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,7 @@ class RunSummary:
 
 def run_match(options: RunOptions) -> RunSummary:
     """Run the matcher once and write the same artifacts used by the CLI."""
+    logger.info("Reading and parsing CV: %s", options.cv_path.name)
     text = read_cv(options.cv_path)
     profile = parse_cv(text)
     profile = replace(
@@ -56,6 +60,14 @@ def run_match(options: RunOptions) -> RunSummary:
         experience_years=options.experience_years,
     )
     country = normalize_country(options.country)
+    logger.info(
+        "Candidate request: position=%s, experience=%s years, country=%s, skills=%d",
+        profile.target_position,
+        profile.experience_years,
+        country,
+        len(profile.skills),
+    )
+    logger.info("Starting live job discovery")
     jobs, provider_notes = search_all(
         profile,
         country,
@@ -63,8 +75,16 @@ def run_match(options: RunOptions) -> RunSummary:
         include_remote_global=options.include_remote_global,
         web_discovery=options.web_discovery,
     )
+    logger.info("Job discovery complete: %d unique jobs", len(jobs))
+    logger.info("Running deterministic CV and position matching")
     matches = rank_jobs(profile, jobs, options.minimum_score)
+    logger.info("Deterministic matcher retained %d jobs", len(matches))
     matches, experience_rejections = filter_experience_compatible(profile, matches)
+    logger.info(
+        "Experience filter retained %d jobs and rejected %d over-senior jobs",
+        len(matches),
+        experience_rejections,
+    )
     if experience_rejections:
         provider_notes.append(
             f"Experience filter: rejected {experience_rejections} over-senior job(s)"
@@ -79,6 +99,7 @@ def run_match(options: RunOptions) -> RunSummary:
         strict=options.llm_strict,
         batch_size=options.llm_batch_size,
     )
+    logger.info("Final LLM filter retained %d jobs", len(matches))
     if llm_note:
         provider_notes.append(llm_note)
 
@@ -94,6 +115,7 @@ def run_match(options: RunOptions) -> RunSummary:
         provider_notes.extend(contact_notes)
 
     tailored_cv = build_tailored_cv(profile, matches, country)
+    logger.info("Writing CSV reports to %s", options.out_dir)
     write_outputs(
         options.out_dir,
         profile,
@@ -104,6 +126,7 @@ def run_match(options: RunOptions) -> RunSummary:
         tailored_cv,
         contact_leads=contact_leads,
     )
+    logger.info("Report generation complete")
     return RunSummary(
         country=country,
         candidate_name=profile.name,

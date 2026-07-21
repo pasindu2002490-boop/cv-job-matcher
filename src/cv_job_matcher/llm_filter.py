@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import time
@@ -9,6 +10,8 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .models import CandidateProfile, MatchResult
+
+logger = logging.getLogger(__name__)
 
 
 def apply_llm_filter(
@@ -32,11 +35,25 @@ def apply_llm_filter(
     # the normal matcher must be reviewed. The limit remains available only for
     # optional/non-strict CLI use.
     selected = matches if strict else matches[: max(1, limit)]
+    logger.info(
+        "LLM filter starting: provider=%s model=%s jobs=%d batch_size=%d",
+        provider_name,
+        selected_model,
+        len(selected),
+        batch_size,
+    )
 
     reranked = []
     blocked_jobs = 0
     batch_size = max(1, batch_size)
     for start in range(0, len(selected), batch_size):
+        logger.info(
+            "LLM batch %d/%d: reviewing jobs %d-%d",
+            (start // batch_size) + 1,
+            max(1, (len(selected) + batch_size - 1) // batch_size),
+            start + 1,
+            min(start + batch_size, len(selected)),
+        )
         pending = [selected[start : start + batch_size]]
         while pending:
             batch = pending.pop(0)
@@ -50,7 +67,13 @@ def apply_llm_filter(
                         if exc.code != 429 or rate_attempts >= 6:
                             raise
                         rate_attempts += 1
-                        time.sleep(_rate_limit_wait(exc))
+                        wait_seconds = _rate_limit_wait(exc)
+                        logger.warning(
+                            "Groq rate limit reached; waiting %.1f seconds before retry %d/6",
+                            wait_seconds,
+                            rate_attempts,
+                        )
+                        time.sleep(wait_seconds)
             except HTTPError as exc:
                 # Groq/WAF can reject content from a particular listing. Split
                 # the batch to isolate it; a blocked single job fails closed.
@@ -60,6 +83,7 @@ def apply_llm_filter(
                     continue
                 if exc.code == 403 and len(batch) == 1:
                     blocked_jobs += 1
+                    logger.warning("Groq blocked one job payload; job rejected safely")
                     continue
                 detail = _error_detail(exc)
                 if strict:
@@ -74,6 +98,7 @@ def apply_llm_filter(
                     pending[0:0] = [batch[:middle], batch[middle:]]
                     continue
                 blocked_jobs += 1
+                logger.warning("Groq returned malformed output for one job; job rejected safely")
                 continue
             except (URLError, TimeoutError) as exc:
                 detail = _error_detail(exc)
@@ -100,6 +125,7 @@ def apply_llm_filter(
     kept_urls = {match.job.url for match in reranked}
     if not strict:
         reranked.extend(match for match in matches[len(selected) :] if match.job.url not in kept_urls)
+    logger.info("LLM filtering complete: kept=%d rejected=%d", len(reranked), len(selected) - len(reranked))
     return (
         sorted(reranked, key=lambda item: item.score, reverse=True),
         f"LLM filter: reviewed {len(selected)} job(s) with {provider_name} / {selected_model}"

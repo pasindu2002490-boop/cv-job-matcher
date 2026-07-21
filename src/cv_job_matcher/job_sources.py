@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from datetime import datetime, timezone
@@ -13,6 +14,8 @@ from urllib.request import Request, urlopen
 
 from .country import adzuna_country_code, normalize_country
 from .models import CandidateProfile, Job
+
+logger = logging.getLogger(__name__)
 
 
 USER_AGENT = "cv-job-matcher/0.1 (+local candidate matching tool)"
@@ -867,14 +870,18 @@ def search_all(
     jobs: list[Job] = []
     notes: list[str] = []
     for provider in default_providers():
+        logger.info("Source %s: starting", provider.name)
         if getattr(provider, "is_search_discovery", False) and not web_discovery:
             notes.append(f"{provider.name}: skipped (use --web-discovery to include search-engine discovery)")
+            logger.info("Source %s: skipped (web discovery disabled)", provider.name)
             continue
         if provider.disabled_reason:
             notes.append(f"{provider.name}: skipped ({provider.disabled_reason})")
+            logger.info("Source %s: skipped (%s)", provider.name, provider.disabled_reason)
             continue
         if provider.is_remote_global and not include_remote_global:
             notes.append(f"{provider.name}: skipped (use --include-remote-global to include worldwide remote boards)")
+            logger.info("Source %s: skipped (remote sources disabled)", provider.name)
             continue
         try:
             result = provider.search(profile, country, limit_per_source)
@@ -883,8 +890,10 @@ def search_all(
             if isinstance(provider, AdzunaProvider) and not provider.enabled:
                 status += " (disabled: set ADZUNA_APP_ID and ADZUNA_APP_KEY for broader country coverage)"
             notes.append(status)
+            logger.info("Source %s: completed with %d jobs", provider.name, len(result))
         except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError, ValueError) as exc:
             notes.append(f"{provider.name}: failed: {exc}")
+            logger.warning("Source %s: failed: %s", provider.name, exc)
     return _dedupe_jobs(jobs), notes
 
 

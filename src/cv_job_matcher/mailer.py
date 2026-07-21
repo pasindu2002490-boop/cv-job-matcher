@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import mimetypes
+import logging
 import os
 import smtplib
 from dataclasses import dataclass
@@ -8,6 +9,8 @@ from email.message import EmailMessage
 from pathlib import Path
 
 from .runner import RunSummary
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -70,9 +73,12 @@ def send_results_email(recipient: str, summary: RunSummary, settings: MailSettin
     message["From"] = settings.sender
 
     smtp_class = smtplib.SMTP_SSL if settings.use_ssl else smtplib.SMTP
+    logger.info("Connecting to SMTP server %s:%d", settings.host, settings.port)
     with smtp_class(settings.host, settings.port, timeout=30) as client:
         if settings.use_tls and not settings.use_ssl:
             client.starttls()
         if settings.username:
             client.login(settings.username, settings.password)
+        logger.info("Sending two CSV reports to %s", recipient)
         client.send_message(message)
+    logger.info("Email delivery completed for %s", recipient)
