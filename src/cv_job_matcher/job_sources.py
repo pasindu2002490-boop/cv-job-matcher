@@ -8,7 +8,7 @@ from html import unescape
 from typing import Iterable
 from xml.etree import ElementTree
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, quote_plus, unquote, urlencode, urlparse
+from urllib.parse import parse_qs, quote_plus, unquote, urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
 
 from .country import adzuna_country_code, normalize_country
@@ -82,6 +82,28 @@ SRI_LANKA_SEARCH_DOMAINS = (
     "jobup.lk",
     "myjobs.lk",
     "itpro.lk",
+    "careerlk.com",
+    "hire.lk",
+    "recruiter.lk",
+    "lankajob.lk",
+    "inseeks.com",
+    "jobs.observer.lk",
+    "cse.lk",
+    "gov.lk",
+)
+
+SRI_LANKA_PORTALS = (
+    ("CareerLK", "https://careerlk.com/jobs/"),
+    ("Hire.lk", "https://www.hire.lk/jobs"),
+    ("Recruiter.lk", "https://www.recruiter.lk/jobs"),
+    ("LankaJob.lk", "https://lankajob.lk/"),
+    ("Inseeks", "https://www.inseeks.com/"),
+    ("Observer Jobs", "https://jobs.observer.lk/"),
+    ("JobPal", "https://jobpal.lk/local-jobs/"),
+    ("Ikman Jobs", "https://ikman.lk/en/ads/sri-lanka/jobs"),
+    ("CareerFirst", "https://www.careerfirst.lk/"),
+    ("CSE Careers", "https://www.cse.lk/"),
+    ("Government Jobs", "https://www.gov.lk/"),
 )
 
 
@@ -711,6 +733,61 @@ class Crawl4AiSeedProvider(JobProvider):
         return jobs
 
 
+class SriLankaPortalProvider(JobProvider):
+    """Low-volume crawler for public Sri Lankan job listing pages.
+
+    It follows only same-site job/listing links and extracts anchors that match
+    the requested position. This complements API and site-specific providers
+    without requiring credentials or treating a portal homepage as a vacancy.
+    """
+
+    def __init__(self, name: str, seed_url: str) -> None:
+        self.name = name
+        self.seed_url = seed_url
+
+    def search(self, profile: CandidateProfile, country: str, limit: int) -> list[Job]:
+        if normalize_country(country) != "sri lanka":
+            return []
+        query_url = _portal_query_url(self.seed_url, profile.target_position)
+        queue = [query_url]
+        visited: set[str] = set()
+        jobs: list[Job] = []
+        origin = urlparse(self.seed_url).netloc.lower().removeprefix("www.")
+
+        while queue and len(visited) < 4 and len(jobs) < limit:
+            page_url = queue.pop(0)
+            if page_url in visited:
+                continue
+            visited.add(page_url)
+            html = _get_text(page_url, headers=BROWSER_HEADERS, timeout=15)
+            for title, url in _html_links(html, page_url):
+                parsed_host = urlparse(url).netloc.lower().removeprefix("www.")
+                if parsed_host != origin or not _jobish_link(url, title):
+                    continue
+                if _generic_listing_title(title) or _listing_like_url(url):
+                    if url not in visited and len(queue) < 3:
+                        queue.append(url)
+                    continue
+                if not _portal_title_matches(profile, title):
+                    continue
+                jobs.append(
+                    Job(
+                        source=self.name,
+                        source_id=_clean_url(url),
+                        title=title,
+                        company=_company_from_url_or_title(url, title),
+                        location="Sri Lanka",
+                        country_hint="sri lanka",
+                        url=url,
+                        description=title,
+                        job_type="public portal listing",
+                    )
+                )
+                if len(jobs) >= limit:
+                    break
+        return _dedupe_jobs(jobs)[:limit]
+
+
 class AdzunaProvider(JobProvider):
     name = "Adzuna"
     endpoint_root = "https://api.adzuna.com/v1/api/jobs"
@@ -759,7 +836,7 @@ class AdzunaProvider(JobProvider):
 
 
 def default_providers() -> list[JobProvider]:
-    return [
+    providers: list[JobProvider] = [
         AdzunaProvider(),
         RemotiveProvider(),
         HimalayasProvider(),
@@ -776,6 +853,8 @@ def default_providers() -> list[JobProvider]:
         Crawl4AiSeedProvider(),
         ArbeitnowProvider(),
     ]
+    providers.extend(SriLankaPortalProvider(name, url) for name, url in SRI_LANKA_PORTALS)
+    return providers
 
 
 def search_all(
@@ -843,6 +922,61 @@ def _get_text(
     request = Request(url, headers=headers or {"User-Agent": USER_AGENT, "Accept": "text/html"})
     with urlopen(request, timeout=timeout) as response:
         return response.read().decode(encoding, errors="replace")
+
+
+def _portal_query_url(seed_url: str, position: str) -> str:
+    if not position:
+        return seed_url
+    host = urlparse(seed_url).netloc.lower()
+    if "hire.lk" in host:
+        return f"https://www.hire.lk/jobs?{urlencode({'q': position})}"
+    return seed_url
+
+
+def _html_links(html: str, base_url: str) -> list[tuple[str, str]]:
+    links = []
+    for match in re.finditer(
+        r'<a\b[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', html, flags=re.I | re.S
+    ):
+        href = unescape(match.group(1)).strip()
+        title = _clean_html(match.group(2))
+        if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")) or not title:
+            continue
+        links.append((title, urljoin(base_url, href)))
+    return links
+
+
+def _jobish_link(url: str, title: str) -> bool:
+    text = f" {url.lower()} {title.lower()} "
+    return any(term in text for term in ("job", "career", "vacanc", "position", "recruit"))
+
+
+def _generic_listing_title(title: str) -> bool:
+    value = title.lower().strip()
+    generic = (
+        "jobs", "browse jobs", "all jobs", "latest jobs", "local jobs", "find jobs",
+        "job vacancies", "vacancies", "careers", "view all", "see live jobs",
+    )
+    return value in generic or value.startswith(("browse all", "view all", "search jobs"))
+
+
+def _listing_like_url(url: str) -> bool:
+    parsed = urlparse(url)
+    path = parsed.path.rstrip("/").lower()
+    return path.endswith(("/jobs", "/careers", "/vacancies", "/local-jobs"))
+
+
+def _portal_title_matches(profile: CandidateProfile, title: str) -> bool:
+    title_lower = title.lower()
+    target_tokens = [
+        token for token in re.findall(r"[a-z0-9+#]+", profile.target_position.lower())
+        if len(token) > 1 and token not in {"and", "the"}
+    ]
+    if target_tokens and (all(token in title_lower for token in target_tokens) or any(
+        token in title_lower for token in target_tokens if token not in {"engineer", "developer"}
+    )):
+        return True
+    return any(term.lower() in title_lower for term in profile.likely_titles if len(term) > 3)
 
 
 def _post_text(
