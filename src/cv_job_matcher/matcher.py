@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 
+from .country import normalize_country
 from .models import CandidateProfile, Job, MatchResult
 
 HIGH_VALUE_SKILLS = {
@@ -43,6 +46,197 @@ LOW_SIGNAL_SKILLS = {
     "sales",
     "scrum",
 }
+
+COUNTRY_ALIASES = {
+    "sri lanka": ("sri lanka", "colombo", "kandy", "galle", "jaffna", "rajagiriya"),
+    "united kingdom": ("united kingdom", "uk", "england", "scotland", "wales", "northern ireland"),
+    "united states": ("united states", "usa", "u.s.", "us"),
+}
+
+GLOBAL_LOCATIONS = ("worldwide", "anywhere", "global", "all regions", "apac", "asia")
+
+# These connectors enumerate the source's current/open inventory on every cache
+# refresh. A posting can remain open longer than the generic age window, so its
+# continued presence is stronger evidence than its original publication date.
+CURRENT_OPEN_INVENTORY_SOURCES = {
+    "Adzuna",
+    "Arbeitnow",
+    "CareerFirst",
+    "Career141",
+    "CareerLK",
+    "Crawl4AI Seeds",
+    "CSE Careers",
+    "DreamJobs.lk",
+    "FindMyJob.lk",
+    "Gazette.lk",
+    "Government Jobs",
+    "GovernmentJobs.lk",
+    "GovernmentVacancies.lk",
+    "Hire.lk",
+    "Himalayas",
+    "Ikman Jobs",
+    "Inseeks",
+    "ITPro.lk",
+    "JobEka.lk",
+    "JobFactory.lk",
+    "Jobber.lk",
+    "JobPal",
+    "Jobup.lk",
+    "job.govdoc.lk",
+    "LankaJob.lk",
+    "LankaQualityJobs.com",
+    "LinkedIn Public",
+    "MYJOBS.LK",
+    "Observer Jobs",
+    "Recruiter.lk",
+    "Recruitme.lk",
+    "Remote OK",
+    "Remotive",
+    "RemoteRocketship",
+    "SLBFE Job Bank",
+    "TimesJobs.lk",
+    "topjobs.lk",
+    "We Work Remotely",
+    "XpressJobs",
+}
+
+
+def filter_country_compatible(
+    jobs: list[Job], country: str, allow_global_remote: bool = False
+) -> tuple[list[Job], int]:
+    """Fail closed when a listing explicitly points outside the selected country."""
+    target = normalize_country(country)
+    aliases = COUNTRY_ALIASES.get(target, (target,))
+    kept = []
+    for job in jobs:
+        location = job.location.strip().lower()
+        hint = normalize_country(job.country_hint)
+        target_in_location = bool(
+            location and any(_contains_location_term(location, alias) for alias in aliases)
+        )
+        other_country = _mentions_other_country(location, target)
+        global_location = any(
+            _contains_location_term(location, term) for term in GLOBAL_LOCATIONS
+        )
+        remote_location = bool(re.search(r"\bremote\b", location))
+
+        # Worldwide-remote opt-in is not permission for foreign on-site or
+        # country-restricted remote vacancies.
+        if allow_global_remote and global_location and not other_country:
+            kept.append(job)
+            continue
+        if (
+            allow_global_remote
+            and remote_location
+            and not other_country
+            and (not hint or hint == target or target_in_location)
+        ):
+            kept.append(job)
+            continue
+        if global_location:
+            continue
+        if location in {"remote", "remote only"}:
+            if hint == target:
+                kept.append(job)
+            continue
+        if target_in_location:
+            kept.append(job)
+            continue
+        if not location and hint == target:
+            kept.append(job)
+            continue
+        # Country-specific providers commonly return a city without a country.
+        if hint == target and not _mentions_other_country(location, target):
+            kept.append(job)
+    return kept, len(jobs) - len(kept)
+
+
+def filter_fresh_jobs(
+    jobs: list[Job], max_age_days: int = 7, now: datetime | None = None
+) -> tuple[list[Job], int]:
+    """Keep live listings and reject stale/unverifiable discovery-only records."""
+    current = now or datetime.now(timezone.utc)
+    cutoff = current - timedelta(days=max_age_days)
+    kept = []
+    for job in jobs:
+        text = f"{job.title} {job.description}".lower()
+        if any(
+            term in text
+            for term in (
+                "applications are closed",
+                "application deadline has passed",
+                "job expired",
+                "job has expired",
+                "job is no longer available",
+                "no longer accepting applications",
+                "position filled",
+                "position has been filled",
+                "vacancy has expired",
+            )
+        ):
+            continue
+        published = _parse_job_date(job.published_at)
+        if published and published > current + timedelta(days=1):
+            continue
+        if (
+            published
+            and published < cutoff
+            and job.source not in CURRENT_OPEN_INVENTORY_SOURCES
+        ):
+            continue
+        if (
+            not published
+            and job.source
+            in {
+                "DuckDuckGo Discovery",
+                "Google Custom Search",
+                "SerpAPI Google",
+                "Crawl4AI",
+                "Crawl4AI Seeds",
+            }
+            and not job.detail_page_verified
+        ):
+            continue
+        kept.append(job)
+    return kept, len(jobs) - len(kept)
+
+
+def _parse_job_date(value: str) -> datetime | None:
+    raw = value.strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            parsed = parsedate_to_datetime(raw)
+        except (TypeError, ValueError):
+            return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _mentions_other_country(location: str, target: str) -> bool:
+    known = {
+        "australia", "bahrain", "bangladesh", "canada", "china", "france",
+        "germany", "hong kong", "india", "indonesia", "ireland", "italy",
+        "japan", "kuwait", "malaysia", "maldives", "nepal", "netherlands",
+        "new zealand", "oman", "pakistan", "philippines", "poland", "qatar",
+        "saudi arabia", "singapore", "spain", "thailand", "united arab emirates",
+        "united kingdom", "united states", "usa", "uk", "vietnam",
+    }
+    target_aliases = set(COUNTRY_ALIASES.get(target, (target,)))
+    return any(
+        country not in target_aliases
+        and _contains_location_term(location, country)
+        for country in known
+    )
+
+
+def _contains_location_term(location: str, term: str) -> bool:
+    escaped = re.escape(term.casefold()).replace(r"\ ", r"\s+")
+    return bool(re.search(rf"(?<![a-z]){escaped}(?![a-z])", location.casefold()))
 
 
 def rank_jobs(profile: CandidateProfile, jobs: list[Job], minimum_score: float = 20.0) -> list[MatchResult]:

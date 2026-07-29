@@ -31,12 +31,12 @@
   <main>
     <div class="eyebrow">AI-powered job search</div>
     <h1>Turn your CV into live job matches.</h1>
-    <p class="intro">Upload your CV and choose your target. We will search live sources, rank suitable openings, and email the CSV reports to you automatically.</p>
+    <p class="intro">Upload your CV and choose your target. We will search live sources concurrently, review every related vacancy, and email the CSV reports to you automatically.</p>
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
     <form action="/submit" method="post" enctype="multipart/form-data">
       <label class="full">Your CV
         <input type="file" name="cv" accept=".pdf,.docx,.txt,.md" required>
-        <small>PDF, DOCX, TXT or Markdown — maximum 10 MB</small>
+        <small>PDF, DOCX, TXT or Markdown &mdash; maximum 10 MB</small>
       </label>
       <label>Email address
         <input type="email" name="email" placeholder="you@example.com" required>
@@ -51,7 +51,7 @@
         <input type="text" name="position" placeholder="AI Engineer" required>
       </label>
       <div class="checks full">
-        <label><input type="checkbox" name="include_remote_global" checked> Include worldwide remote jobs</label>
+        <label><input type="checkbox" name="include_remote_global"> Include worldwide remote jobs</label>
         <label><input type="checkbox" name="web_discovery" checked> Expand with web discovery</label>
       </div>
       <button type="submit">Find jobs and email my CSV reports</button>

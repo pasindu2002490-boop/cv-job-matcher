@@ -1,0 +1,30 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HOME=/home/app \
+    TMPDIR=/tmp/cv-job-matcher \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright \
+    UPLOAD_ROOT=/tmp/cv-job-matcher/uploads \
+    OUTPUT_ROOT=/tmp/cv-job-matcher/results
+
+WORKDIR /app
+
+COPY pyproject.toml README.md ./
+COPY src ./src
+
+RUN python -m pip install --upgrade pip \
+    && python -m pip install . \
+    && python -m playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/* \
+    && chmod -R a+rX /opt/playwright \
+    && addgroup --system app \
+    && adduser --system --ingroup app --home /home/app app \
+    && mkdir -p /tmp/cv-job-matcher/uploads /tmp/cv-job-matcher/results \
+    && chown -R app:app /home/app /tmp/cv-job-matcher
+
+USER app
+
+CMD ["python", "-m", "cv_job_matcher.cloud_worker", "crawl"]

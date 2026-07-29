@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import logging
 import re
@@ -7,13 +8,20 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from flask import Flask, jsonify, render_template, request
+from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 
+from .job_sources import default_providers
+from .llm_filter import warm_ollama_fallback
 from .mailer import MailSettings, send_results_email
 from .runner import RunOptions, run_match
+
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
@@ -44,7 +52,29 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.get("/health")
     def health():
-        return jsonify({"status": "ok"})
+        ollama_reachable, ollama_model_available = _ollama_runtime_status()
+        groq_configured = bool(os.getenv("GROQ_API_KEY", "").strip())
+        return jsonify(
+            {
+                "status": "ok",
+                "architecture": "concurrent-source-fan-out/single-final-llm",
+                "llm_strategy": "groq-first/ollama-fallback",
+                "configured_source_agents": len(default_providers()),
+                "crawl4ai_enabled": os.getenv("CRAWL4AI_ENABLED", "").lower()
+                in {"1", "true", "yes"},
+                "groq_configured": groq_configured,
+                "ollama_fallback_enabled": _environment_flag(
+                    "OLLAMA_FALLBACK_ENABLED", True
+                ),
+                "ollama_reachable": ollama_reachable,
+                "ollama_model_available": ollama_model_available,
+                "llm_configured": groq_configured or ollama_model_available,
+                "smtp_configured": bool(
+                    os.getenv("SMTP_HOST", "").strip()
+                    and os.getenv("SMTP_FROM", "").strip()
+                ),
+            }
+        )
 
     @app.post("/submit")
     def submit():
@@ -65,9 +95,19 @@ def create_app(test_config: dict | None = None) -> Flask:
                 error=f"Email delivery is not configured: {exc}",
             ), 503
         if not os.getenv("GROQ_API_KEY", "").strip():
+            _, ollama_model_available = _ollama_runtime_status()
+        else:
+            ollama_model_available = False
+        if (
+            not os.getenv("GROQ_API_KEY", "").strip()
+            and not ollama_model_available
+        ):
             return render_template(
                 "index.html",
-                error="Groq filtering is not configured. Set GROQ_API_KEY and restart the server.",
+                error=(
+                    "Final LLM review is not configured. Set GROQ_API_KEY, or "
+                    "enable Ollama and install the configured local model."
+                ),
             ), 503
 
         task_id = uuid4().hex
@@ -88,7 +128,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         logger.info(
             "Submission %s queued: recipient=%s position=%s country=%s experience=%s",
             task_id,
-            email,
+            _masked_email(email),
             position,
             country,
             experience_raw,
@@ -137,6 +177,13 @@ def _validate_submission(upload, email: str, country: str, position: str, experi
     return ""
 
 
+def _masked_email(email: str) -> str:
+    local, separator, domain = email.partition("@")
+    if not separator:
+        return "***"
+    return f"{local[:1]}***@{domain}"
+
+
 def _set_task(task_id: str, **values: object) -> None:
     with TASK_LOCK:
         TASKS[task_id].update(values)
@@ -156,6 +203,12 @@ def _process_submission(
     try:
         logger.info("Submission %s started", task_id)
         _set_task(task_id, status="running", message="Searching and matching live jobs.")
+        if _environment_flag("OLLAMA_FALLBACK_ENABLED", True):
+            threading.Thread(
+                target=warm_ollama_fallback,
+                name=f"ollama-warm-{task_id[:8]}",
+                daemon=True,
+            ).start()
         summary = run_match(RunOptions(
             cv_path=cv_path,
             country=country,
@@ -170,14 +223,28 @@ def _process_submission(
             llm_limit=int(os.getenv("LLM_LIMIT", "500")),
             llm_strict=True,
             llm_batch_size=int(os.getenv("LLM_BATCH_SIZE", "5")),
+            limit_per_source=int(os.getenv("SOURCE_RESULT_LIMIT", "5000")),
         ))
         _set_task(task_id, status="emailing", message="Preparing and sending your CSV reports.")
         send_results_email(email, summary)
         _set_task(
             task_id,
             status="complete",
-            message=f"Email sent with {summary.matches_written} matches from {summary.jobs_fetched} jobs.",
+            message=(
+                f"Email sent with {summary.matches_written} final matches from "
+                f"{summary.related_jobs} related vacancies "
+                f"({summary.jobs_fetched} raw jobs discovered"
+                + (
+                    f", {summary.manual_review_jobs} need manual review"
+                    if summary.manual_review_jobs
+                    else ""
+                )
+                + ")."
+            ),
             jobs_fetched=summary.jobs_fetched,
+            related=summary.related_jobs,
+            rejected=summary.rejected_jobs,
+            manual_review=summary.manual_review_jobs,
             matches=summary.matches_written,
             completed_at=datetime.now(timezone.utc).isoformat(),
         )
@@ -191,6 +258,50 @@ def _process_submission(
             cv_path.parent.rmdir()
         except OSError:
             pass
+
+
+def _environment_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _ollama_runtime_status() -> tuple[bool, bool]:
+    if not _environment_flag("OLLAMA_FALLBACK_ENABLED", True):
+        return False, False
+    endpoint = (
+        os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip()
+        or "http://127.0.0.1:11434"
+    ).rstrip("/")
+    if endpoint.endswith("/api"):
+        tags_url = f"{endpoint}/tags"
+    elif endpoint.endswith("/v1"):
+        tags_url = f"{endpoint[:-3].rstrip('/')}/api/tags"
+    else:
+        tags_url = f"{endpoint}/api/tags"
+    try:
+        request_object = Request(
+            tags_url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "cv-job-matcher/0.1",
+            },
+        )
+        with urlopen(request_object, timeout=2) as response:
+            payload = json.loads(response.read().decode("utf-8", errors="replace"))
+    except (HTTPError, URLError, TimeoutError, OSError, ValueError):
+        return False, False
+    configured_model = (
+        os.getenv("OLLAMA_MODEL", "llama3.1:8b").strip() or "llama3.1:8b"
+    )
+    model_rows = payload.get("models", []) if isinstance(payload, dict) else []
+    available_models = {
+        str(row.get("name", "")).strip()
+        for row in model_rows
+        if isinstance(row, dict)
+    }
+    return True, configured_model in available_models
 
 
 app = create_app()

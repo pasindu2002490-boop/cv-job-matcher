@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src 'self' https: http://localhost:*; img-src 'self' data:; script-src 'self'; style-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+    >
+    <meta
+      name="description"
+      content="Match your CV against the latest available Sri Lankan job inventory."
+    >
+    <title>Sri Lanka CV Job Matcher</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script src="./config.js"></script>
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Job Lens home">
+        <span class="brand-mark" aria-hidden="true">JL</span>
+        <span>
+          <strong>Job Lens</strong>
+          <small>Sri Lanka</small>
+        </span>
+      </a>
+      <div id="session-summary" class="session-summary" aria-live="polite"></div>
+    </header>
+
+    <main id="main-content">
+      <section class="hero" aria-labelledby="page-title">
+        <div class="hero-copy">
+          <p class="eyebrow">CV-guided vacancy matching</p>
+          <h1 id="page-title">A clearer view of the jobs that fit you.</h1>
+          <p class="hero-intro">
+            Upload your CV once. The service checks the shared Sri Lankan job
+            inventory, reviews likely matches, and keeps the task available if
+            you close this page.
+          </p>
+          <div class="trust-row" aria-label="Service characteristics">
+            <span>Private upload</span>
+            <span>Persistent progress</span>
+            <span>Downloadable results</span>
+          </div>
+        </div>
+
+        <aside class="process-card" aria-labelledby="process-title">
+          <p class="eyebrow">What happens next</p>
+          <h2 id="process-title">One submission, three clear stages</h2>
+          <ol class="process-list">
+            <li>
+              <span>01</span>
+              <div>
+                <strong>Read your CV</strong>
+                <p>Extract skills and role evidence from the uploaded file.</p>
+              </div>
+            </li>
+            <li>
+              <span>02</span>
+              <div>
+                <strong>Review live inventory</strong>
+                <p>Compare your profile with the latest stored vacancies.</p>
+              </div>
+            </li>
+            <li>
+              <span>03</span>
+              <div>
+                <strong>Prepare results</strong>
+                <p>Create downloadable reports after the worker finishes.</p>
+              </div>
+            </li>
+          </ol>
+        </aside>
+      </section>
+
+      <div id="configuration-alert" class="alert alert-error hidden" role="alert"></div>
+
+      <section class="workspace" aria-label="Job matching workspace">
+        <div class="card auth-card">
+          <div class="card-heading">
+            <div>
+              <p class="step-label">Step 1</p>
+              <h2>Secure sign in</h2>
+            </div>
+            <span id="auth-badge" class="badge">Checking</span>
+          </div>
+
+          <div id="signed-out-panel">
+            <p class="supporting-copy">
+              We use a password-free email link so only you can view your task
+              and result files.
+            </p>
+            <form id="auth-form">
+              <label for="auth-email">Email address</label>
+              <div class="inline-control">
+                <input
+                  id="auth-email"
+                  name="email"
+                  type="email"
+                  autocomplete="email"
+                  placeholder="you@example.com"
+                  required
+                >
+                <button id="send-link-button" class="button button-secondary" type="submit">
+                  Send sign-in link
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div id="signed-in-panel" class="hidden">
+            <p class="signed-in-copy">
+              Signed in as <strong id="signed-in-email"></strong>
+            </p>
+            <button id="sign-out-button" class="text-button" type="button">Sign out</button>
+          </div>
+
+          <div id="local-mode-panel" class="hidden">
+            <p class="supporting-copy">
+              Local anonymous mode is enabled. This mode must stay disabled in Netlify.
+            </p>
+          </div>
+          <p id="auth-message" class="form-message" role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="card submission-card">
+          <div class="card-heading">
+            <div>
+              <p class="step-label">Step 2</p>
+              <h2>Describe your search</h2>
+            </div>
+          </div>
+
+          <form id="match-form">
+            <fieldset id="match-fields" disabled>
+              <div class="field-grid">
+                <div class="field field-wide">
+                  <label for="cv-file">CV file</label>
+                  <div id="file-drop-zone" class="file-drop-zone">
+                    <input
+                      id="cv-file"
+                      name="cv"
+                      type="file"
+                      accept=".pdf,.doc,.docx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                      required
+                    >
+                    <div>
+                      <strong id="file-label">Choose your CV</strong>
+                      <span id="file-help">PDF, Word, or text. Maximum 10 MB.</span>
+                    </div>
+                    <span class="file-action" aria-hidden="true">Browse</span>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="country">Country</label>
+                  <input id="country" name="country" type="text" value="Sri Lanka" required>
+                </div>
+
+                <div class="field">
+                  <label for="position">Position or role</label>
+                  <input
+                    id="position"
+                    name="position"
+                    type="text"
+                    placeholder="e.g. DevOps Engineer"
+                    autocomplete="organization-title"
+                    required
+                  >
+                </div>
+
+                <div class="field">
+                  <label for="years-experience">Years of experience</label>
+                  <input
+                    id="years-experience"
+                    name="years_experience"
+                    type="number"
+                    min="0"
+                    max="60"
+                    step="0.5"
+                    value="0"
+                    inputmode="decimal"
+                    required
+                  >
+                </div>
+
+                <div class="field checkbox-field">
+                  <input id="remote" name="remote" type="checkbox">
+                  <label for="remote">
+                    <strong>Include remote roles</strong>
+                    <span>Allow vacancies that can be worked outside the office.</span>
+                  </label>
+                </div>
+              </div>
+
+              <button id="submit-button" class="button button-primary button-full" type="submit">
+                Start matching
+              </button>
+            </fieldset>
+          </form>
+          <p id="submission-message" class="form-message" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section id="task-section" class="task-section hidden" aria-labelledby="task-title">
+        <div class="card task-card">
+          <div class="task-header">
+            <div>
+              <p class="step-label">Task progress</p>
+              <h2 id="task-title">Your matching run</h2>
+              <p id="task-reference" class="task-reference"></p>
+            </div>
+            <span id="task-status-badge" class="badge badge-running">Queued</span>
+          </div>
+
+          <div class="progress-wrap">
+            <progress id="task-progress" max="100" aria-label="Task progress"></progress>
+            <div class="progress-copy">
+              <strong id="task-status-message">Waiting for a worker</strong>
+              <span id="task-progress-label">Progress will update from the server.</span>
+            </div>
+          </div>
+
+          <div id="task-error" class="alert alert-error hidden" role="alert"></div>
+          <div id="result-panel" class="result-panel hidden">
+            <div class="result-heading">
+              <div>
+                <p class="step-label">Results</p>
+                <h3>Download your reports</h3>
+              </div>
+              <button id="refresh-results-button" class="text-button" type="button">
+                Refresh links
+              </button>
+            </div>
+            <p id="result-message" class="supporting-copy"></p>
+            <ul id="result-list" class="result-list"></ul>
+          </div>
+
+          <div class="task-actions">
+            <button id="refresh-task-button" class="button button-secondary" type="button">
+              Refresh status
+            </button>
+            <button id="clear-task-button" class="text-button hidden" type="button">
+              Clear from this browser
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>Your CV is processed for this task and should be removed according to the service retention policy.</p>
+    </footer>
+  </body>
+</html>

@@ -32,6 +32,7 @@ class Job:
     salary: str = ""
     job_type: str = ""
     fetched_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    detail_page_verified: bool = False
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,8 @@ class MatchResult:
     concerns: tuple[str, ...] = ()
     llm_decision: str = ""
     llm_reason: str = ""
+    llm_provider: str = ""
+    llm_model: str = ""
 
 
 @dataclass(frozen=True)

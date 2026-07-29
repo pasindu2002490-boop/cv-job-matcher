@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import mimetypes
 import logging
+import mimetypes
 import os
 import smtplib
 from dataclasses import dataclass
 from email.message import EmailMessage
-from pathlib import Path
 
 from .runner import RunSummary
 
@@ -42,17 +41,26 @@ class MailSettings:
 
 def build_results_message(recipient: str, summary: RunSummary) -> EmailMessage:
     message = EmailMessage()
-    message["Subject"] = f"Your CV job matches — {summary.matches_written} matches"
+    message["Subject"] = f"Your CV job matches - {summary.matches_written} matches"
     message["To"] = recipient
     message.set_content(
         "Your CV job search is complete.\n\n"
         f"Country: {summary.country}\n"
         f"Jobs discovered: {summary.jobs_fetched}\n"
-        f"Matches: {summary.matches_written}\n\n"
+        f"Related vacancies reviewed: {summary.related_jobs}\n"
+        f"Matches: {summary.matches_written}\n"
+        f"Manual-review vacancies: {summary.manual_review_jobs}\n\n"
         "The generated CSV reports are attached. Always verify eligibility and vacancy "
         "availability on the employer's official application page.\n"
     )
-    for filename in ("all_discovered_jobs.csv", "job_matches.csv"):
+    for filename in (
+        "all_discovered_jobs.csv",
+        "related_vacancies.csv",
+        "job_matches.csv",
+        "rejected_vacancies.csv",
+        "manual_review_vacancies.csv",
+        "source_coverage.csv",
+    ):
         path = summary.output_dir / filename
         if not path.is_file():
             continue
@@ -67,7 +75,11 @@ def build_results_message(recipient: str, summary: RunSummary) -> EmailMessage:
     return message
 
 
-def send_results_email(recipient: str, summary: RunSummary, settings: MailSettings | None = None) -> None:
+def send_results_email(
+    recipient: str,
+    summary: RunSummary,
+    settings: MailSettings | None = None,
+) -> None:
     settings = settings or MailSettings.from_environment()
     message = build_results_message(recipient, summary)
     message["From"] = settings.sender
@@ -79,6 +91,17 @@ def send_results_email(recipient: str, summary: RunSummary, settings: MailSettin
             client.starttls()
         if settings.username:
             client.login(settings.username, settings.password)
-        logger.info("Sending two CSV reports to %s", recipient)
+        logger.info(
+            "Sending discovery, coverage, decision-audit, and match CSVs to %s",
+            _masked_recipient(recipient),
+        )
         client.send_message(message)
-    logger.info("Email delivery completed for %s", recipient)
+    logger.info("Email delivery completed for %s", _masked_recipient(recipient))
+
+
+def _masked_recipient(recipient: str) -> str:
+    local, separator, domain = recipient.partition("@")
+    if not separator:
+        return "***"
+    visible = local[:1] if local else ""
+    return f"{visible}***@{domain}"

@@ -1,0 +1,20 @@
+{
+  "name": "sri-lanka-cv-job-matcher-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/dev.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.4"
+  },
+  "devDependencies": {
+    "dotenv": "^16.6.1",
+    "esbuild": "^0.25.8"
+  }
+}

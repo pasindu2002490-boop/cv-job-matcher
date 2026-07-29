@@ -10,6 +10,14 @@
 web_data/
 out/
 out_*/
+current_results/
+expanded_results/
+results_*/
+.current_cv_run
+*.stdout.log
+*.stderr.log
+web_server*.log
+cloudflared*.log
 
 # Local environments and caches
 .venv/

@@ -17,10 +17,10 @@
 </head>
 <body>
   <main>
-    <div class="icon">✓</div>
+    <div class="icon">&#10003;</div>
     <h1>Your search has started.</h1>
     <p>Live job sources can take several minutes. The CSV reports will be emailed to <strong>{{ email }}</strong> when processing finishes.</p>
-    <div id="status">Queued…</div>
+    <div id="status">Queued&hellip;</div>
     <a href="/">Submit another CV</a>
   </main>
   <script>
@@ -33,7 +33,7 @@
         statusBox.textContent = task.message || task.status;
         if (!['complete', 'failed'].includes(task.status)) setTimeout(refresh, 3000);
       } catch (_) {
-        statusBox.textContent = 'Checking status…';
+        statusBox.textContent = 'Checking status...';
         setTimeout(refresh, 5000);
       }
     }

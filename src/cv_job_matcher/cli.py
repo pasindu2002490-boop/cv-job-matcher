@@ -3,10 +3,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from .runner import RunOptions, run_match
 
 
 def main(argv: list[str] | None = None) -> int:
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env")
     parser = argparse.ArgumentParser(description="Create a tailored CV and live job match report.")
     parser.add_argument("--cv", required=True, type=Path, help="Path to CV file (.txt, .md, .pdf, .docx).")
     parser.add_argument("--country", required=True, help="Target country, e.g. Germany, United States, UK.")
@@ -30,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--llm-model", default="gpt-4.1-mini", help="LLM model name for --llm-filter.")
     parser.add_argument("--llm-limit", type=int, default=80, help="Maximum ranked jobs to send to the LLM filter.")
     parser.add_argument("--out", type=Path, default=Path("out"), help="Output directory.")
-    parser.add_argument("--limit-per-source", type=int, default=50, help="Max jobs to request per source.")
+    parser.add_argument("--limit-per-source", type=int, default=200, help="Max jobs to request per source.")
     parser.add_argument("--minimum-score", type=float, default=40.0, help="Minimum match score to include.")
     parser.add_argument(
         "--find-contacts",

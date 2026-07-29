@@ -1,36 +1,61 @@
 from __future__ import annotations
 
+from collections import Counter
 import csv
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Sequence, TextIO
 
 from .models import CandidateProfile, ContactLead, Job, MatchResult
 
+if TYPE_CHECKING:
+    from .agent_graph import SourceAgentTrace
+
+
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@")
+
+
+def _csv_safe_cell(value: object) -> object:
+    """Keep untrusted text from being evaluated as a spreadsheet formula."""
+    if isinstance(value, str) and value.lstrip().startswith(_CSV_FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
+
+class _FormulaSafeCsvWriter:
+    """Apply formula-injection protection at the final CSV serialization boundary."""
+
+    def __init__(self, handle: TextIO) -> None:
+        self._writer: Any = csv.writer(handle)
+
+    def writerow(self, row: Sequence[object]) -> object:
+        return self._writer.writerow([_csv_safe_cell(cell) for cell in row])
+
+
 SRI_LANKA_SOURCE_AUDIT = [
-    ("topjobs.lk", "integrated", "Public vacancy HTML parser."),
-    ("XpressJobs", "integrated", "Public JSON endpoint discovered from app bundle."),
-    ("ikmanJOBS", "pending", "Public category pages checked; needs custom parser/API discovery."),
-    ("Jobber.lk", "pending", "Needs custom parser/API discovery."),
-    ("JobFactory.lk", "pending", "Search URL checked; returned 404 for simple query shape."),
-    ("DreamJobs.lk", "pending", "Public HTML checked; needs custom search/result parser."),
-    ("JobEka.lk", "pending", "Needs custom parser/API discovery."),
-    ("FindMyJob.lk", "pending", "Needs custom parser/API discovery."),
+    ("topjobs.lk", "integrated", "Complete current open-vacancy inventory with pagination."),
+    ("XpressJobs", "integrated", "Complete active JSON inventory with record-count pagination."),
+    ("Jobber.lk", "integrated/bounded", "Public same-site inventory crawler."),
+    ("JobFactory.lk", "integrated/bounded", "Public same-site inventory crawler."),
+    ("DreamJobs.lk", "integrated/bounded", "Public same-site inventory crawler."),
+    ("JobEka.lk", "integrated/bounded", "Public same-site inventory crawler."),
+    ("FindMyJob.lk", "integrated/bounded", "Public same-site inventory crawler."),
     ("LinkedIn Jobs Sri Lanka", "integrated/limited", "Public guest pages parsed; may rate-limit."),
-    ("Career141", "pending", "Public page checked; Next.js data/parser work needed."),
+    ("Career141", "integrated/bounded", "Public same-site inventory crawler."),
     ("CareerFirst.lk", "integrated", "Public same-site listing crawler."),
     ("ObserverJobs.lk", "integrated", "Public same-site listing crawler."),
-    ("TimesJobs.lk", "pending", "Needs custom parser/API discovery."),
-    ("GovernmentJobs.lk", "pending", "Government/public-sector jobs; role-specific parser needed."),
-    ("GovernmentVacancies.lk", "pending", "Government/public-sector jobs; role-specific parser needed."),
-    ("Gazette.lk", "pending", "Gazette/public-sector notices; not a normal job API."),
-    ("job.govdoc.lk", "pending", "Government documents; role extraction parser needed."),
-    ("SLBFE Job Bank", "pending", "Foreign employment bank; role extraction parser needed."),
-    ("LankaQualityJobs.com", "pending", "Needs custom parser/API discovery."),
-    ("Recruitme.lk", "pending", "Needs custom parser/API discovery."),
+    ("TimesJobs.lk", "integrated/bounded", "Public same-site inventory crawler."),
+    ("GovernmentJobs.lk", "integrated/bounded", "Public same-site public-sector crawler."),
+    ("GovernmentVacancies.lk", "integrated/bounded", "Public same-site public-sector crawler."),
+    ("Gazette.lk", "integrated/bounded", "Public same-site notices crawler."),
+    ("job.govdoc.lk", "integrated/bounded", "Public same-site public-sector crawler."),
+    ("SLBFE Job Bank", "integrated/bounded", "Public foreign-employment inventory crawler."),
+    ("LankaQualityJobs.com", "integrated/bounded", "Public HTTP same-site inventory crawler."),
+    ("Recruitme.lk", "integrated/bounded", "Public same-site inventory crawler."),
     ("Jobpal.lk", "integrated", "Public same-site listing crawler."),
-    ("Jobup.lk", "pending", "Needs custom parser/API discovery."),
-    ("MYJOBS.LK", "pending", "Needs custom parser/API discovery."),
-    ("ITPro.lk", "integrated", "AI/Data RSS feed."),
+    ("Jobup.lk", "registered/limited", "Connector is registered; current HTTPS certificate failure is reported per run."),
+    ("MYJOBS.LK", "integrated/bounded", "Public same-site inventory crawler."),
+    ("ITPro.lk", "integrated", "Dynamic category inventory with pagination and local role filtering."),
     ("CareerLK", "integrated", "Public same-site listing crawler."),
     ("Hire.lk", "integrated", "Public position search and listing crawler."),
     ("Recruiter.lk", "integrated", "Public same-site listing crawler."),
@@ -43,7 +68,7 @@ SRI_LANKA_SOURCE_AUDIT = [
     ("DuckDuckGo", "integrated", "Search-discovery mode via --web-discovery."),
     ("Google Custom Search", "optional", "Set GOOGLE_CSE_API_KEY/GOOGLE_API_KEY and GOOGLE_CSE_ID."),
     ("SerpAPI Google", "optional", "Set SERPAPI_API_KEY."),
-    ("Crawl4AI", "optional hook", "Set CRAWL4AI_ENABLED=1 and CRAWL4AI_SEED_URLS after installing crawl4ai."),
+    ("Crawl4AI", "optional", "Rendered bounded discovery for configured CRAWL4AI_SEED_URLS."),
     ("Company contact enrichment", "optional", "Run with --find-contacts. Uses public evidence, Google CSE when configured, and LinkedIn people-search links for manual verification."),
 ]
 
@@ -57,8 +82,16 @@ def write_outputs(
     provider_notes: list[str],
     tailored_cv: str,
     contact_leads: list[ContactLead] | None = None,
+    related_matches: list[MatchResult] | None = None,
+    rejected_matches: list[MatchResult] | None = None,
+    manual_review_matches: list[MatchResult] | None = None,
+    source_traces: Sequence[SourceAgentTrace] | None = None,
 ) -> None:
     contact_leads = contact_leads or []
+    related_matches = related_matches if related_matches is not None else matches
+    rejected_matches = rejected_matches or []
+    manual_review_matches = manual_review_matches or []
+    source_traces = list(source_traces or [])
     out_dir.mkdir(parents=True, exist_ok=True)
     # These legacy CSVs are no longer part of the public report set. Remove
     # stale copies when a caller reuses an existing output directory.
@@ -67,9 +100,38 @@ def write_outputs(
     (out_dir / "tailored_cv.md").write_text(tailored_cv, encoding="utf-8")
     _write_all_jobs_csv(out_dir / "all_discovered_jobs.csv", jobs)
     contact_by_company = _best_contact_by_company(contact_leads)
+    _write_csv(
+        out_dir / "related_vacancies.csv",
+        related_matches,
+        {},
+    )
     _write_csv(out_dir / "job_matches.csv", matches, contact_by_company)
+    _write_csv(out_dir / "rejected_vacancies.csv", rejected_matches, {})
+    _write_csv(
+        out_dir / "manual_review_vacancies.csv",
+        manual_review_matches,
+        {},
+    )
+    _write_source_coverage_csv(
+        out_dir / "source_coverage.csv",
+        source_traces,
+        jobs,
+        related_matches,
+        matches,
+        rejected_matches,
+        manual_review_matches,
+    )
     (out_dir / "job_matches.md").write_text(
-        _build_markdown_report(profile, country, matches, provider_notes),
+        _build_markdown_report(
+            profile,
+            country,
+            matches,
+            provider_notes,
+            discovered_count=len(jobs),
+            related_count=len(related_matches),
+            rejected_count=len(rejected_matches),
+            manual_review_count=len(manual_review_matches),
+        ),
         encoding="utf-8",
     )
     (out_dir / "companies_hiring.md").write_text(
@@ -80,12 +142,23 @@ def write_outputs(
         _build_contacts_report(country, contact_leads),
         encoding="utf-8",
     )
-    (out_dir / "source_audit.md").write_text(_build_source_audit(), encoding="utf-8")
+    (out_dir / "source_audit.md").write_text(
+        _build_source_audit(
+            source_traces=source_traces,
+            jobs=jobs,
+            related_matches=related_matches,
+            matches=matches,
+            rejected_matches=rejected_matches,
+            manual_review_matches=manual_review_matches,
+            provider_notes=provider_notes,
+        ),
+        encoding="utf-8",
+    )
 
 
 def _write_all_jobs_csv(path: Path, jobs: list[Job]) -> None:
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
+        writer = _FormulaSafeCsvWriter(handle)
         writer.writerow(
             [
                 "title",
@@ -95,6 +168,7 @@ def _write_all_jobs_csv(path: Path, jobs: list[Job]) -> None:
                 "source",
                 "published_at",
                 "fetched_at_utc",
+                "detail_page_verified",
                 "job_type",
                 "salary",
                 "apply_url",
@@ -110,6 +184,7 @@ def _write_all_jobs_csv(path: Path, jobs: list[Job]) -> None:
                     job.source,
                     job.published_at,
                     job.fetched_at.isoformat(),
+                    "yes" if job.detail_page_verified else "no",
                     job.job_type,
                     job.salary,
                     job.url,
@@ -117,9 +192,61 @@ def _write_all_jobs_csv(path: Path, jobs: list[Job]) -> None:
             )
 
 
+def _write_source_coverage_csv(
+    path: Path,
+    source_traces: Sequence[SourceAgentTrace],
+    jobs: list[Job],
+    related_matches: list[MatchResult],
+    matches: list[MatchResult],
+    rejected_matches: list[MatchResult],
+    manual_review_matches: list[MatchResult],
+) -> None:
+    """Write machine-readable, run-specific connector and pipeline counts."""
+    discovered_by_source = Counter(job.source for job in jobs)
+    related_by_source = Counter(match.job.source for match in related_matches)
+    final_by_source = Counter(match.job.source for match in matches)
+    rejected_by_source = Counter(match.job.source for match in rejected_matches)
+    manual_by_source = Counter(
+        match.job.source for match in manual_review_matches
+    )
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = _FormulaSafeCsvWriter(handle)
+        writer.writerow(
+            [
+                "source",
+                "connector",
+                "status",
+                "full_inventory_rows",
+                "role_candidate_rows_returned",
+                "unique_discovered",
+                "related_before_llm",
+                "final_vacancies",
+                "final_rejected",
+                "final_manual_review",
+                "note",
+            ]
+        )
+        for trace in source_traces:
+            writer.writerow(
+                [
+                    trace.source,
+                    trace.connector,
+                    trace.status,
+                    "" if trace.inventory_total is None else trace.inventory_total,
+                    trace.discovered,
+                    discovered_by_source[trace.source],
+                    related_by_source[trace.source],
+                    final_by_source[trace.source],
+                    rejected_by_source[trace.source],
+                    manual_by_source[trace.source],
+                    trace.note,
+                ]
+            )
+
+
 def _write_csv(path: Path, matches: list[MatchResult], contact_by_company: dict[str, ContactLead]) -> None:
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
+        writer = _FormulaSafeCsvWriter(handle)
         writer.writerow(
             [
                 "match_score",
@@ -129,10 +256,13 @@ def _write_csv(path: Path, matches: list[MatchResult], contact_by_company: dict[
                 "source",
                 "published_at",
                 "fetched_at_utc",
+                "detail_page_verified",
                 "matched_skills",
                 "concerns",
                 "llm_decision",
                 "llm_reason",
+                "llm_provider",
+                "llm_model",
                 "hr_contact_name",
                 "hr_title",
                 "hr_email",
@@ -159,10 +289,13 @@ def _write_csv(path: Path, matches: list[MatchResult], contact_by_company: dict[
                     job.source,
                     job.published_at,
                     job.fetched_at.isoformat(),
+                    "yes" if job.detail_page_verified else "no",
                     ", ".join(match.matched_skills),
                     " ".join(match.concerns),
                     match.llm_decision,
                     match.llm_reason,
+                    match.llm_provider,
+                    match.llm_model,
                     contact.contact_name if contact else "",
                     contact.title if contact else "",
                     contact.email if contact else "",
@@ -182,7 +315,7 @@ def _write_csv(path: Path, matches: list[MatchResult], contact_by_company: dict[
 def _write_companies_csv(path: Path, matches: list[MatchResult], contact_by_company: dict[str, ContactLead]) -> None:
     seen = set()
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
+        writer = _FormulaSafeCsvWriter(handle)
         writer.writerow(
             [
                 "company",
@@ -238,7 +371,7 @@ def _write_companies_csv(path: Path, matches: list[MatchResult], contact_by_comp
 
 def _write_contacts_csv(path: Path, leads: list[ContactLead]) -> None:
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
+        writer = _FormulaSafeCsvWriter(handle)
         writer.writerow(
             [
                 "company",
@@ -300,8 +433,14 @@ def _build_markdown_report(
     country: str,
     matches: list[MatchResult],
     provider_notes: list[str],
+    discovered_count: int | None = None,
+    related_count: int | None = None,
+    rejected_count: int = 0,
+    manual_review_count: int = 0,
 ) -> str:
     now = datetime.now(timezone.utc).isoformat()
+    discovered_count = len(matches) if discovered_count is None else discovered_count
+    related_count = len(matches) if related_count is None else related_count
     lines = [
         "# Job Match Report",
         "",
@@ -311,6 +450,13 @@ def _build_markdown_report(
         f"- Target position: {profile.target_position or 'Inferred from CV'}",
         f"- Experience years: {profile.experience_years if profile.experience_years is not None else 'Not supplied'}",
         f"- Extracted skills: {', '.join(profile.skills) if profile.skills else 'None detected'}",
+        "",
+        "## Pipeline Counts",
+        f"- All discovered vacancies: {discovered_count}",
+        f"- Related vacancies before final LLM review: {related_count}",
+        f"- Final vacancies: {len(matches)}",
+        f"- Rejected during final eligibility review: {rejected_count}",
+        f"- Vacancies requiring manual review: {manual_review_count}",
         "",
         "## Source Coverage",
     ]
@@ -343,7 +489,13 @@ def _build_markdown_report(
             ]
         )
         if match.llm_decision or match.llm_reason:
-            lines.append(f"- LLM: {match.llm_decision or 'review'} - {match.llm_reason}")
+            provenance = " / ".join(
+                value for value in (match.llm_provider, match.llm_model) if value
+            )
+            lines.append(
+                f"- LLM{f' ({provenance})' if provenance else ''}: "
+                f"{match.llm_decision or 'review'} - {match.llm_reason}"
+            )
         if match.concerns:
             lines.append(f"- Manual checks: {' '.join(match.concerns)}")
     return "\n".join(lines).strip() + "\n"
@@ -420,13 +572,143 @@ def _build_contacts_report(country: str, leads: list[ContactLead]) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
-def _build_source_audit() -> str:
+def _build_source_audit(
+    source_traces: Sequence[SourceAgentTrace] = (),
+    jobs: list[Job] | None = None,
+    related_matches: list[MatchResult] | None = None,
+    matches: list[MatchResult] | None = None,
+    rejected_matches: list[MatchResult] | None = None,
+    manual_review_matches: list[MatchResult] | None = None,
+    provider_notes: Sequence[str] = (),
+) -> str:
+    jobs = jobs or []
+    related_matches = related_matches or []
+    matches = matches or []
+    rejected_matches = rejected_matches or []
+    manual_review_matches = manual_review_matches or []
+    discovered_by_source = Counter(job.source for job in jobs)
+    related_by_source = Counter(match.job.source for match in related_matches)
+    final_by_source = Counter(match.job.source for match in matches)
+    rejected_by_source = Counter(match.job.source for match in rejected_matches)
+    manual_by_source = Counter(
+        match.job.source for match in manual_review_matches
+    )
+    status_counts = Counter(trace.status for trace in source_traces)
+    rows_before_dedupe = (
+        sum(trace.discovered for trace in source_traces)
+        if source_traces
+        else len(jobs)
+    )
+    consolidated_rows = max(0, rows_before_dedupe - len(jobs))
+    decisioned_rows = sum(
+        bool(match.llm_decision)
+        for match in [
+            *matches,
+            *rejected_matches,
+            *manual_review_matches,
+        ]
+    )
+    accounted_rows = (
+        len(matches) + len(rejected_matches) + len(manual_review_matches)
+    )
+    partition_status = (
+        "complete" if accounted_rows == len(related_matches) else "INCOMPLETE"
+    )
     lines = [
         "# Source Audit",
         "",
-        "Google-style result counts may include duplicates, cached pages, expired roles, global remote roles, and pages that require login or JavaScript. This tool records only retrievable openings with URLs from configured sources.",
+        f"- Generated at UTC: {datetime.now(timezone.utc).isoformat()}",
+        f"- All discovered vacancies: {len(jobs)}",
+        f"- Source-agent rows before deduplication: {rows_before_dedupe}",
+        f"- Duplicate/syndicated rows consolidated: {consolidated_rows}",
+        f"- Related vacancies before final LLM review: {len(related_matches)}",
+        f"- Final vacancies: {len(matches)}",
+        f"- Rejected during final eligibility review: {len(rejected_matches)}",
+        f"- Vacancies requiring manual review: {len(manual_review_matches)}",
+        f"- Final output partition: {partition_status} ({accounted_rows} of {len(related_matches)} related rows)",
+        f"- Output rows with a recorded LLM decision: {decisioned_rows}",
+        "",
+        "A connector returning zero rows does not prove that its website has no vacancies. "
+        "Only rows actually retrieved during this run are counted.",
+        "",
+        "## Connector Status Definitions",
+        "",
+        "- `completed_with_results`: the connector ran and returned one or more rows.",
+        "- `completed_inventory_no_role_candidates`: a complete current inventory was loaded, but the deterministic role-keyword gate returned no candidates.",
+        "- `connector_empty_unverified`: the connector ran but returned no rows; website inventory was not verified empty.",
+        "- `skipped`: the connector did not run, with the reason recorded below.",
+        "- `failed`: the connector attempted to run but raised an error.",
         "",
     ]
+    if source_traces:
+        lines.extend(
+            [
+                "## Run Outcome",
+                "",
+                f"- Completed with results: {status_counts['completed_with_results']}",
+                f"- Complete inventory, no role candidates: {status_counts['completed_inventory_no_role_candidates']}",
+                f"- Connector empty, inventory unverified: {status_counts['connector_empty_unverified']}",
+                f"- Skipped: {status_counts['skipped']}",
+                f"- Failed: {status_counts['failed']}",
+                "",
+                "| Source | Connector | Status | Full inventory rows | Role-candidate rows returned | Unique discovered | Related | Final | Final rejected | Manual review | Note |",
+                "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+            ]
+        )
+        for trace in source_traces:
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _markdown_cell(trace.source),
+                        _markdown_cell(trace.connector),
+                        f"`{trace.status}`",
+                        "" if trace.inventory_total is None else str(trace.inventory_total),
+                        str(trace.discovered),
+                        str(discovered_by_source[trace.source]),
+                        str(related_by_source[trace.source]),
+                        str(final_by_source[trace.source]),
+                        str(rejected_by_source[trace.source]),
+                        str(manual_by_source[trace.source]),
+                        _markdown_cell(trace.note),
+                    ]
+                )
+                + " |"
+            )
+    else:
+        lines.extend(
+            [
+                "## Run Outcome",
+                "",
+                "Structured source traces were not supplied for this run, so per-connector "
+                "completion or emptiness cannot be asserted.",
+            ]
+        )
+        if provider_notes:
+            lines.extend(["", "### Legacy connector messages", ""])
+            lines.extend(f"- {_markdown_cell(note)}" for note in provider_notes)
+
+    lines.extend(
+        [
+            "",
+            "## Interpretation Boundary",
+            "",
+            "Search-engine counts can include duplicates, cached pages, expired roles, "
+            "global remote roles, and pages requiring login or JavaScript. This audit "
+            "describes connector execution and retrieved records, not a guarantee that "
+            "every vacancy on every website was captured.",
+            "",
+            "## Implementation Inventory",
+            "",
+            "The entries below describe configured or planned integrations. They are not "
+            "evidence that a connector ran successfully in this report.",
+            "",
+        ]
+    )
     for site, status, notes in SRI_LANKA_SOURCE_AUDIT:
         lines.append(f"- {site}: {status}. {notes}")
     return "\n".join(lines).strip() + "\n"
+
+
+def _markdown_cell(value: object) -> str:
+    return str(value or "").replace("|", r"\|").replace("\r", " ").replace("\n", " ")

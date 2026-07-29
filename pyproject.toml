@@ -7,7 +7,7 @@ name = "cv-job-matcher"
 version = "0.1.0"
 description = "Evidence-backed CV tailoring and live job matching by country."
 requires-python = ">=3.9"
-dependencies = ["pypdf>=4.0", "flask>=3.0", "gunicorn>=22.0; platform_system != 'Windows'"]
+dependencies = ["pypdf>=4.0", "flask>=3.0", "python-dotenv>=1.0", "crawl4ai>=0.9,<1", "psycopg[binary]>=3.2", "gunicorn>=22.0; platform_system != 'Windows'"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]

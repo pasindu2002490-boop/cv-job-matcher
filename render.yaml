@@ -12,6 +12,22 @@ services:
         value: 3.12.11
       - key: WEB_WORKERS
         value: "2"
+      - key: SOURCE_AGENT_WORKERS
+        value: "8"
+      - key: SOURCE_RESULT_LIMIT
+        value: "5000"
+      - key: SOURCE_INVENTORY_CACHE_MINUTES
+        value: "30"
+      - key: WEB_DISCOVERY_MAX_QUERIES_PER_SOURCE
+        value: "4"
+      - key: WEB_DISCOVERY_MAX_DETAIL_PAGES_PER_SOURCE
+        value: "30"
+      - key: WEB_DISCOVERY_DETAIL_WORKERS
+        value: "6"
+      - key: LLM_CV_CHAR_LIMIT
+        value: "16000"
+      - key: LLM_JOB_DESCRIPTION_CHAR_LIMIT
+        value: "2500"
       - key: MAX_CV_UPLOAD_MB
         value: "10"
       - key: SMTP_HOST
@@ -36,3 +52,7 @@ services:
         sync: false
       - key: GROQ_MODEL
         value: openai/gpt-oss-20b
+      # Render's free web service does not run the local Ollama daemon.
+      # Enable only when OLLAMA_BASE_URL points to a separately hosted service.
+      - key: OLLAMA_FALLBACK_ENABLED
+        value: "0"
