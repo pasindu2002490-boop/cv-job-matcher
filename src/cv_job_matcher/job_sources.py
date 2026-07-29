@@ -1080,7 +1080,11 @@ class RemoteRocketshipProvider(JobProvider):
             for position in dict.fromkeys(position for position in positions if position)
         ]
         for endpoint in endpoints:
-            html = _get_text(endpoint, headers=BROWSER_HEADERS)
+            try:
+                html = _get_text(endpoint, headers=BROWSER_HEADERS)
+            except (HTTPError, URLError, TimeoutError, OSError) as exc:
+                logger.warning("%s blocked or unavailable: %s: %s", self.name, endpoint, exc)
+                continue
             for item in _json_ld_items(html):
                 url = str(item.get("url") or "")
                 title = str(item.get("name") or item.get("title") or "")
@@ -1293,10 +1297,11 @@ class GoogleCustomSearchProvider(DuckDuckGoDiscoveryProvider):
                 OSError,
                 json.JSONDecodeError,
                 ValueError,
-            ):
+            ) as exc:
+                logger.warning("%s blocked or unavailable for query %s: %s", self.name, query, exc)
                 if candidates:
                     break
-                raise
+                return []
             for item in payload.get("items", []):
                 title = str(item.get("title") or "")
                 url = str(item.get("link") or "")
@@ -1656,11 +1661,9 @@ class SriLankaPortalProvider(JobProvider):
             if page_url in visited:
                 continue
             visited.add(page_url)
-            try:
-                html = _get_text(page_url, headers=BROWSER_HEADERS, timeout=15)
-            except (HTTPError, URLError, TimeoutError, OSError) as exc:
-                last_error = exc
-                logger.warning("%s discovery failed: %s: %s", self.name, page_url, exc)
+            html, fetch_error = self._fetch_page(page_url)
+            if html is None:
+                last_error = fetch_error
                 continue
             successful_listings += 1
             _collect_structured_job_links(
@@ -1711,7 +1714,8 @@ class SriLankaPortalProvider(JobProvider):
             )
 
         if successful_listings == 0 and last_error is not None:
-            raise last_error
+            logger.warning("%s could not load any discovery page: %s", self.name, last_error)
+            return []
 
         jobs: list[Job] = []
         prioritized = _prioritize_job_candidates(candidates, profile)[:candidate_cap]
@@ -1749,6 +1753,28 @@ class SriLankaPortalProvider(JobProvider):
             if len(jobs) >= limit:
                 break
         return _dedupe_jobs(jobs)[:limit]
+
+    def _fetch_page(self, page_url: str) -> tuple[str | None, Exception | None]:
+        attempts = [page_url]
+        parsed = urlparse(page_url)
+        if parsed.scheme.lower() == "https" and parsed.hostname:
+            host = parsed.hostname.lower().removeprefix("www.")
+            if host == "jobup.lk":
+                attempts.append(parsed._replace(scheme="http").geturl())
+        last_error: Exception | None = None
+        for attempt_url in dict.fromkeys(attempts):
+            for timeout in (15, 30):
+                try:
+                    return _get_text(attempt_url, headers=BROWSER_HEADERS, timeout=timeout), None
+                except HTTPError as exc:
+                    last_error = exc
+                    if exc.code in {401, 403, 404, 410}:
+                        break
+                    break
+                except (URLError, TimeoutError, OSError) as exc:
+                    last_error = exc
+                    continue
+        return None, last_error
 
 
 def _fetch_portal_detail_job(
@@ -2153,7 +2179,9 @@ def _html_links(html: str, base_url: str) -> list[tuple[str, str]]:
             or not title
         ):
             continue
-        links.append((title, urljoin(base_url, href)))
+        canonical = _canonical_crawl_url(urljoin(base_url, href))
+        if canonical:
+            links.append((title, canonical))
     return links
 
 
@@ -2317,7 +2345,10 @@ def _same_site(url: str, seed_url: str) -> bool:
 
 
 def _canonical_crawl_url(url: str) -> str:
-    parsed = urlparse(unescape(str(url or "")).strip())
+    raw = unescape(str(url or "")).strip()
+    if not raw or any(ch.isspace() for ch in raw) or "`" in raw:
+        return ""
+    parsed = urlparse(raw)
     if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
         return ""
     path = re.sub(r"/+", "/", parsed.path or "/")

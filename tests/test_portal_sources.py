@@ -4,10 +4,14 @@ import sys
 import threading
 import time
 from types import SimpleNamespace
+from urllib.error import HTTPError, URLError
+
+import pytest
 
 import cv_job_matcher.job_sources as job_sources
 from cv_job_matcher.job_sources import (
     Crawl4AiSeedProvider,
+    RemoteRocketshipProvider,
     SRI_LANKA_PORTALS,
     SriLankaPortalProvider,
     default_providers,
@@ -25,7 +29,10 @@ from cv_job_matcher.models import CandidateProfile
 
 
 def test_html_links_resolve_relative_job_urls():
-    html = '<a class="job" href="/jobs/devops-engineer">DevOps Engineer</a>'
+    html = (
+        '<a class="job" href="/jobs/devops-engineer">DevOps Engineer</a>'
+        '<a href="/category/`https:/lankajob.lk/company/` + post.profile_slug">Broken</a>'
+    )
 
     assert _html_links(html, "https://example.lk/jobs") == [
         ("DevOps Engineer", "https://example.lk/jobs/devops-engineer")
@@ -242,6 +249,46 @@ def test_portal_provider_crawls_search_category_pagination_and_detail_pages(
     assert search_url in requested
     assert "https://example.lk/job-category/technology" in requested
     assert "https://example.lk/find?keywords=DevOps+Engineer&page=2" in requested
+
+
+@pytest.mark.parametrize(
+    ("seed", "error"),
+    [
+        ("https://jobup.lk/", URLError("certificate verify failed")),
+        ("https://www.careerfirst.lk/", TimeoutError("timed out")),
+    ],
+)
+def test_portal_provider_returns_empty_when_a_seed_page_is_unreachable(
+    monkeypatch,
+    seed,
+    error,
+):
+    def fake_get_text(url, **_kwargs):
+        raise error
+
+    monkeypatch.setattr(job_sources, "_get_text", fake_get_text)
+    provider = SriLankaPortalProvider("Example Jobs", seed)
+
+    assert provider.search(
+        CandidateProfile("CV", target_position="DevOps Engineer"),
+        "Sri Lanka",
+        5,
+    ) == []
+
+
+def test_remote_rocketship_returns_empty_when_blocked(monkeypatch):
+    def fake_get_text(url, **_kwargs):
+        raise HTTPError(url, 403, "Forbidden", hdrs=None, fp=None)
+
+    monkeypatch.setattr(job_sources, "_get_text", fake_get_text)
+
+    jobs = RemoteRocketshipProvider().search(
+        CandidateProfile("CV", target_position="AI Engineer"),
+        "Sri Lanka",
+        5,
+    )
+
+    assert jobs == []
 
 
 def test_careerlk_accountant_category_is_prioritized_before_unrelated_categories(

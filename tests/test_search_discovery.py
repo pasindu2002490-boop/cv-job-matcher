@@ -2,7 +2,7 @@ import json
 import threading
 import time
 from dataclasses import replace
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 
 import pytest
 
@@ -200,6 +200,23 @@ def test_search_api_keeps_prior_candidates_if_a_later_query_fails(monkeypatch):
 
     assert calls == 2
     assert [job.url for job in jobs] == [url]
+
+
+def test_google_custom_search_returns_empty_when_authorization_fails(monkeypatch):
+    def fake_get_json(_endpoint, _params):
+        raise HTTPError("https://www.googleapis.com/customsearch/v1", 401, "Unauthorized", None, None)
+
+    monkeypatch.setenv("GOOGLE_CSE_API_KEY", "test-key")
+    monkeypatch.setenv("GOOGLE_CSE_ID", "test-cx")
+    monkeypatch.setattr(sources, "_get_json", fake_get_json)
+
+    jobs = GoogleCustomSearchProvider().search(
+        CandidateProfile("CV", target_position="DevOps Engineer"),
+        "Sri Lanka",
+        5,
+    )
+
+    assert jobs == []
 
 
 def test_search_detail_validation_is_bounded_concurrent_and_ordered(monkeypatch):
