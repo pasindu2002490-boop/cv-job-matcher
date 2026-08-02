@@ -433,9 +433,9 @@ def _itpro_category_urls(index_html: str) -> list[str]:
         parsed = urlparse(url)
         if parsed.netloc.lower().removeprefix("www.") != "itpro.lk":
             continue
-        if not re.fullmatch(r"/jobs/[^/]+/", parsed.path):
+        if not re.fullmatch(r"/jobs/[^/]+", parsed.path.rstrip("/")):
             continue
-        categories.append(url)
+        categories.append(parsed._replace(path=parsed.path.rstrip("/") + "/").geturl())
     return list(dict.fromkeys(categories))
 
 
@@ -447,11 +447,11 @@ def _itpro_pagination_urls(html: str, category_url: str) -> list[str]:
         query = parse_qs(parsed.query)
         if (
             parsed.netloc.lower().removeprefix("www.") == "itpro.lk"
-            and parsed.path == category.path
+            and parsed.path.rstrip("/") == category.path.rstrip("/")
             and query.get("p", [""])[0].isdigit()
             and int(query["p"][0]) > 1
         ):
-            pages.append(url)
+            pages.append(parsed._replace(path=parsed.path.rstrip("/") + "/").geturl())
     return list(dict.fromkeys(pages))
 
 
@@ -584,7 +584,7 @@ def _itpro_feed_urls(index_html: str, target_position: str) -> list[str]:
         if parsed.path.rstrip("/") == "/rss/all" or _target_role_matches(
             title, target_position
         ):
-            discovered.append(url)
+            discovered.append(parsed._replace(path=parsed.path.rstrip("/") + "/").geturl())
     if "https://itpro.lk/rss/all/" not in discovered:
         discovered.insert(0, "https://itpro.lk/rss/all/")
     return list(dict.fromkeys(discovered))
@@ -1718,11 +1718,13 @@ class SriLankaPortalProvider(JobProvider):
             return []
 
         jobs: list[Job] = []
+        detail_failures: list[tuple[str, Exception]] = []
         prioritized = _prioritize_job_candidates(candidates, profile)[:candidate_cap]
         worker_count = max(1, min(self.max_detail_workers, len(prioritized)))
         for batch_start in range(0, len(prioritized), worker_count):
             batch = prioritized[batch_start : batch_start + worker_count]
             batch_jobs: dict[int, Job] = {}
+            batch_failures: list[tuple[str, Exception]] = []
             with ThreadPoolExecutor(max_workers=worker_count) as executor:
                 futures = {}
                 for offset, url in enumerate(batch):
@@ -1741,7 +1743,8 @@ class SriLankaPortalProvider(JobProvider):
                     try:
                         job = future.result()
                     except Exception as exc:
-                        logger.warning("%s detail failed: %s: %s", self.name, url, exc)
+                        batch_failures.append((url, exc))
+                        detail_failures.append((url, exc))
                         continue
                     if job is not None:
                         batch_jobs[offset] = job
@@ -1752,6 +1755,22 @@ class SriLankaPortalProvider(JobProvider):
                         break
             if len(jobs) >= limit:
                 break
+            # A whole batch of server-side failures means the portal's detail
+            # service is unavailable. Do not hammer every remaining candidate.
+            if len(batch) >= 3 and len(batch_failures) == len(batch) and all(
+                isinstance(exc, HTTPError) and 500 <= exc.code < 600
+                for _, exc in batch_failures
+            ):
+                break
+        if detail_failures:
+            first_url, first_error = detail_failures[0]
+            logger.warning(
+                "%s detail pages unavailable (%d attempted); first failure: %s: %s",
+                self.name,
+                len(detail_failures),
+                first_url,
+                first_error,
+            )
         return _dedupe_jobs(jobs)[:limit]
 
     def _fetch_page(self, page_url: str) -> tuple[str | None, Exception | None]:
@@ -2279,6 +2298,19 @@ def _listing_like_url(url: str) -> bool:
     }
     if segments[-1] in listing_leaf_names:
         return True
+    # Portal category indexes often use short slugs such as /it-jobs or
+    # /jobs-in-colombo.  The word "job" alone must not make these detail ads.
+    leaf = segments[-1]
+    listing_slug = leaf.replace("_", "-").removesuffix(".php")
+    if len(segments) == 1 and (
+        listing_slug.endswith("-jobs")
+        or "-jobs-in-" in listing_slug
+        or listing_slug.startswith("jobs-in-")
+        or listing_slug.startswith("government-job-vacanc")
+    ):
+        return True
+    if segments == ["post", "job", "vacancy"]:
+        return True
     listing_segments = {
         "category",
         "categories",
@@ -2346,7 +2378,12 @@ def _same_site(url: str, seed_url: str) -> bool:
 
 def _canonical_crawl_url(url: str) -> str:
     raw = unescape(str(url or "")).strip()
-    if not raw or any(ch.isspace() for ch in raw) or "`" in raw:
+    if (
+        not raw
+        or any(ch.isspace() for ch in raw)
+        or any(ch in raw for ch in ("`", '"', "'"))
+        or re.search(r"https?:/{1,2}", raw[8:], flags=re.I)
+    ):
         return ""
     parsed = urlparse(raw)
     if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
@@ -2618,7 +2655,9 @@ def _potential_job_detail_link(url: str, title: str) -> bool:
     parsed = urlparse(url)
     path_segments = {segment.lower() for segment in parsed.path.split("/") if segment}
     non_job_segments = {
+        "account",
         "about",
+        "auth",
         "blog",
         "contact",
         "employers",
@@ -2628,7 +2667,12 @@ def _potential_job_detail_link(url: str, title: str) -> bool:
         "news",
         "privacy",
         "register",
+        "redirect",
         "resume",
+        "share",
+        "signin",
+        "signup",
+        "social",
         "terms",
         "training",
     }

@@ -20,6 +20,7 @@ from cv_job_matcher.job_sources import (
     _jobish_link,
     _json_ld_items,
     _listing_like_url,
+    _potential_job_detail_link,
     _portal_search_form_urls,
     _portal_title_matches,
     _position_variants,
@@ -49,6 +50,40 @@ def test_portal_title_matching_uses_requested_field():
 def test_search_page_is_not_treated_as_an_individual_job():
     assert _listing_like_url("https://www.hire.lk/jobs?q=DevOps+Engineer")
     assert not _listing_like_url("https://www.hire.lk/jobs/123/devops-engineer")
+
+
+@pytest.mark.parametrize(
+    ("url", "title"),
+    [
+        ("https://career141.com/it-jobs", "IT Jobs"),
+        ("https://career141.com/pharmaceutical-jobs", "Pharmaceutical Jobs"),
+        ("https://recruitme.lk/jobs-in-colombo", "Jobs in Colombo"),
+        (
+            "https://recruitme.lk/accounts-finance-management-jobs-in-colombo",
+            "Accounts and finance jobs in Colombo",
+        ),
+        ("https://recruitme.lk/post/job/vacancy", "Post a job vacancy"),
+        (
+            "https://governmentjobs.lk/government_job_vacancies_in_sri_lanka.php",
+            "Government job vacancies in Sri Lanka",
+        ),
+        (
+            "https://www.hire.lk/auth/facebook/redirect?redirect_to=https%3A%2F%2Fwww.hire.lk%2Fjobs",
+            "Continue with Facebook",
+        ),
+    ],
+)
+def test_portal_navigation_and_auth_links_are_not_detail_ads(url, title):
+    assert not _potential_job_detail_link(url, title)
+
+
+def test_malformed_social_share_url_is_rejected():
+    html = (
+        '<a href="/Home/showJobDetails/Accounting/20867/&quot;https:/twitter.com/share">'
+        "Share job</a>"
+    )
+
+    assert _html_links(html, "https://www.timesjobs.lk/") == []
 
 
 def test_jobish_link_does_not_treat_a_job_portal_hostname_as_job_evidence():
@@ -274,6 +309,33 @@ def test_portal_provider_returns_empty_when_a_seed_page_is_unreachable(
         "Sri Lanka",
         5,
     ) == []
+
+
+def test_portal_stops_after_a_full_batch_of_server_failures(monkeypatch, caplog):
+    seed = "https://broken.example/jobs"
+    detail_urls = [f"https://broken.example/vacancy/{index}" for index in range(12)]
+    listing = "".join(
+        f'<a href="{url}">AI Engineer {index}</a>'
+        for index, url in enumerate(detail_urls)
+    )
+    requested_details = []
+
+    def fake_get_text(url, **_kwargs):
+        if url == seed:
+            return listing
+        requested_details.append(url)
+        raise HTTPError(url, 500, "Internal Server Error", hdrs=None, fp=None)
+
+    monkeypatch.setattr(job_sources, "_get_text", fake_get_text)
+    provider = SriLankaPortalProvider("Broken Jobs", seed)
+
+    assert provider.search(
+        CandidateProfile("CV", target_position="AI Engineer"),
+        "Sri Lanka",
+        10,
+    ) == []
+    assert len(requested_details) == provider.max_detail_workers
+    assert "detail pages unavailable (6 attempted)" in caplog.text
 
 
 def test_remote_rocketship_returns_empty_when_blocked(monkeypatch):

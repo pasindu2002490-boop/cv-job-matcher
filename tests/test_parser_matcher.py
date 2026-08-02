@@ -67,6 +67,50 @@ def test_explicit_minimum_experience_is_enforced_but_junior_is_kept():
     assert required_experience_years(junior) == 0
 
 
+def test_five_year_candidate_rejects_internship_when_target_is_manager():
+    profile = replace(
+        parse_cv("Jane\nProject Management Intern with one year of experience"),
+        target_position="Project Manager",
+        experience_years=5,
+    )
+    internship = Job(
+        "test", "1", "Project Manager Intern", "Example", "Colombo", "sri lanka",
+        "https://e/1", "Support project planning and delivery.",
+    )
+    manager = Job(
+        "test", "2", "Project Manager", "Example", "Colombo", "sri lanka",
+        "https://e/2", "Requires 5 years of project management experience.",
+    )
+
+    kept, rejected = filter_experience_compatible(
+        profile,
+        rank_jobs(profile, [internship, manager], minimum_score=float("-inf")),
+    )
+
+    assert [match.job.source_id for match in kept] == ["2"]
+    assert rejected == 1
+
+
+def test_experienced_candidate_can_request_an_internship_explicitly():
+    profile = replace(
+        parse_cv("Jane\nCareer changer"),
+        target_position="Project Management Internship",
+        experience_years=5,
+    )
+    internship = Job(
+        "test", "1", "Project Management Intern", "Example", "Colombo", "sri lanka",
+        "https://e/1", "Support project planning and delivery.",
+    )
+
+    kept, rejected = filter_experience_compatible(
+        profile,
+        rank_jobs(profile, [internship], minimum_score=float("-inf")),
+    )
+
+    assert [match.job.source_id for match in kept] == ["1"]
+    assert rejected == 0
+
+
 def test_country_filter_rejects_global_and_foreign_jobs():
     jobs = [
         Job("local", "1", "AI Engineer", "A", "Colombo", "sri lanka", "https://e/1", ""),

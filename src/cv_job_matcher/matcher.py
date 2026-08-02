@@ -248,15 +248,33 @@ def rank_jobs(profile: CandidateProfile, jobs: list[Job], minimum_score: float =
 def filter_experience_compatible(
     profile: CandidateProfile, matches: list[MatchResult]
 ) -> tuple[list[MatchResult], int]:
-    """Remove jobs whose title or stated requirement exceeds supplied experience."""
+    """Remove jobs whose seniority conflicts with supplied experience.
+
+    The explicit CLI/form experience value is authoritative. CV wording may add
+    evidence, but it must never override this deterministic gate.
+    """
     if profile.experience_years is None:
         return matches, 0
     kept = []
     for match in matches:
         required = required_experience_years(match.job)
-        if required is None or required <= profile.experience_years:
+        if (
+            (required is None or required <= profile.experience_years)
+            and not _is_underlevel_entry_role(profile, match.job)
+        ):
             kept.append(match)
     return kept, len(matches) - len(kept)
+
+
+def _is_underlevel_entry_role(profile: CandidateProfile, job: Job) -> bool:
+    """Reject internships for experienced candidates unless explicitly requested."""
+    years = profile.experience_years
+    if years is None or years < 3:
+        return False
+    entry_pattern = r"\b(?:intern(?:ship)?|trainee|graduate trainee|apprentice)\b"
+    if re.search(entry_pattern, profile.target_position.lower()):
+        return False
+    return bool(re.search(entry_pattern, job.title.lower()))
 
 
 def required_experience_years(job: Job) -> float | None:
@@ -319,6 +337,9 @@ def _score_job(profile: CandidateProfile, job: Job) -> MatchResult:
         term in profile.raw_text.lower() for term in ("senior", "lead", "manager", "principal", "5 years", "6 years", "7 years")
     ):
         concerns.append("Seniority may need manual review.")
+    if _is_underlevel_entry_role(profile, job):
+        score -= 45.0
+        concerns.append("Internship or trainee seniority is below the supplied experience years.")
     return MatchResult(
         job=job,
         score=round(min(score, 100.0), 1),

@@ -246,19 +246,19 @@ def run_match(options: RunOptions) -> RunSummary:
             llm_decision="reject",
             llm_reason=(
                 (match.llm_reason + "; ") if match.llm_reason else ""
-            ) + "Rejected by final deterministic experience safety check",
+            ) + "Rejected by final deterministic experience/seniority safety check",
         )
         for match in pre_experience_matches
         if id(match) not in kept_after_experience
     )
     logger.info(
-        "Final experience safety check retained %d jobs and rejected %d over-senior jobs",
+        "Final experience safety check retained %d jobs and rejected %d seniority-mismatched jobs",
         len(matches),
         experience_rejections,
     )
     if experience_rejections:
         provider_notes.append(
-            f"Final experience check: rejected {experience_rejections} over-senior job(s)"
+            f"Final experience check: rejected {experience_rejections} seniority-mismatched job(s)"
         )
     if options.llm_filter and options.llm_strict:
         expected = Counter(_match_audit_key(match) for match in related_matches)
