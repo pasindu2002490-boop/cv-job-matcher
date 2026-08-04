@@ -64,9 +64,11 @@ def test_health_endpoint(tmp_path: Path) -> None:
     payload = response.get_json()
     assert payload["status"] == "ok"
     assert payload["architecture"] == "concurrent-source-fan-out/single-final-llm"
-    assert payload["llm_strategy"] == "groq-first/ollama-fallback"
+    assert payload["llm_strategy"] in {"auto", "openai", "groq"}
+    assert "llm_provider" in payload
     assert payload["configured_source_agents"] >= 40
     assert isinstance(payload["crawl4ai_enabled"], bool)
+    assert isinstance(payload["openai_configured"], bool)
     assert isinstance(payload["groq_configured"], bool)
     assert isinstance(payload["ollama_fallback_enabled"], bool)
     assert isinstance(payload["ollama_reachable"], bool)
