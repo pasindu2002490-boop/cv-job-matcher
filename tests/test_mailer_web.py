@@ -46,7 +46,12 @@ def _make_app(tmp_path: Path):
 def _register(client, email: str = "person@example.com", password: str = "secret123") -> None:
     assert client.post(
         "/register",
-        data={"email": email, "password": password, "password_confirm": password},
+        data={
+            "display_name": "Test User",
+            "email": email,
+            "password": password,
+            "password_confirm": password,
+        },
         follow_redirects=False,
     ).status_code in {302, 303}
 
@@ -85,9 +90,9 @@ def test_new_user_gets_free_matches_without_subscribe(tmp_path: Path) -> None:
     app = _make_app(tmp_path)
     client = app.test_client()
     _register(client)
-    home = client.get("/")
+    home = client.get("/app")
     assert home.status_code == 200
-    assert b"free matches" in home.data.lower() or b"Free trial" in home.data
+    assert b"free" in home.data.lower()
     response = client.post("/submit", data={
         "email": "person@example.com",
         "country": "Sri Lanka",
@@ -96,6 +101,18 @@ def test_new_user_gets_free_matches_without_subscribe(tmp_path: Path) -> None:
     })
     assert response.status_code == 400
     assert b"Please select a CV file" in response.data
+
+
+def test_home_and_pricing_pages(tmp_path: Path) -> None:
+    app = _make_app(tmp_path)
+    client = app.test_client()
+    assert client.get("/").status_code == 200
+    assert b"CareerSync" in client.get("/").data
+    pricing = client.get("/pricing")
+    assert pricing.status_code == 200
+    assert b"1 month" in pricing.data
+    assert b"1 year" in pricing.data
+    assert client.get("/contact").status_code == 200
 
 
 def test_web_form_rejects_missing_cv(tmp_path: Path) -> None:
@@ -163,3 +180,44 @@ def test_valid_submission_fields_pass_validation() -> None:
         filename = "candidate.pdf"
 
     assert _validate_submission(Upload(), "person@example.com", "Sri Lanka", "DevOps Engineer", "1") == ""
+
+
+def test_feedback_saved_and_visible_in_admin(tmp_path: Path) -> None:
+    app = _make_app(tmp_path)
+    client = app.test_client()
+    _register(client, email="admin@example.com", password="secret123")
+    from cv_job_matcher.auth_store import AuthStore
+
+    store = AuthStore(Path(app.config["AUTH_DB_PATH"]))
+    admin = store.get_user_by_email("admin@example.com")
+    assert admin is not None
+    store.set_admin(admin.id, True)
+
+    response = client.post(
+        "/feedback",
+        data={
+            "name": "Alex",
+            "email": "alex@example.com",
+            "rating": "5",
+            "message": "Great matcher experience.",
+        },
+    )
+    assert response.status_code == 200
+    assert b"Thanks for your feedback" in response.data
+
+    items = store.list_feedback()
+    assert len(items) == 1
+    assert items[0].name == "Alex"
+    assert items[0].rating == 5
+    assert items[0].status == "new"
+
+    client.get("/logout", follow_redirects=True)
+    client.post("/login", data={"email": "admin@example.com", "password": "secret123"})
+    admin_page = client.get("/admin/feedback")
+    assert admin_page.status_code == 200
+    assert b"Great matcher experience." in admin_page.data
+    assert b"Alex" in admin_page.data
+
+    review = client.post(f"/admin/feedback/{items[0].id}/review", follow_redirects=True)
+    assert review.status_code == 200
+    assert store.list_feedback()[0].status == "reviewed"

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Admin feedback · CareerSync{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="eyebrow">Admin</div>
+  <h1>Feedback</h1>
+  <p class="intro">Review ratings and comments submitted through the site.</p>
+  {% if message %}<div class="ok">{{ message }}</div>{% endif %}
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+  <div class="actions" style="margin-bottom:18px;">
+    <a class="btn secondary" href="/admin">Users</a>
+    <a class="btn secondary" href="/admin/payments">Pending payments</a>
+    <a class="btn secondary" href="/admin/feedback">Feedback</a>
+  </div>
+
+  <h2>Submissions ({{ feedback|length }})</h2>
+  {% if not feedback %}
+    <p class="muted">No feedback yet.</p>
+  {% else %}
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>From</th>
+            <th>Rating</th>
+            <th>Message</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in feedback %}
+          <tr>
+            <td>{{ item.created_at[:19].replace('T', ' ') }}</td>
+            <td>
+              <strong>{{ item.name }}</strong><br>
+              <span class="muted">{{ item.email }}</span>
+            </td>
+            <td>{{ item.rating }}/5</td>
+            <td style="max-width:320px;white-space:pre-wrap;">{{ item.message }}</td>
+            <td>{{ item.status }}</td>
+            <td>
+              <div class="actions" style="gap:6px;flex-wrap:wrap;">
+                {% if item.status != 'reviewed' %}
+                <form method="post" action="/admin/feedback/{{ item.id }}/review">
+                  <button type="submit" class="btn secondary">Mark reviewed</button>
+                </form>
+                {% endif %}
+                <form method="post" action="/admin/feedback/{{ item.id }}/delete" onsubmit="return confirm('Delete this feedback?');">
+                  <button type="submit" class="btn secondary">Delete</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

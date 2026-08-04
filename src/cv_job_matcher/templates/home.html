@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}CareerSync · Home{% endblock %}
+{% block content %}
+<section class="hero">
+  <div class="hero-copy">
+    <div class="eyebrow">Home</div>
+    <h1>CareerSync<span>turns CVs into live matches.</span></h1>
+    <p class="lead">Upload your CV, set a target role, and get job matches emailed as CSV reports. Start with {{ free_run_limit }} free matches — then pick a plan that fits.</p>
+    <div class="actions">
+      <a class="btn" href="/register">Start free</a>
+      <a class="btn secondary" href="/pricing">View plans</a>
+      <a class="btn secondary" href="/contact">Contact us</a>
+    </div>
+  </div>
+  <div class="hero-visual" aria-hidden="true">
+    <img src="{{ url_for('static', filename='hero-art.svg') }}" alt="" width="460" height="340">
+  </div>
+</section>
+
+<section class="page home-sections">
+  <div class="eyebrow">How it works</div>
+  <h2 class="section-title">Three steps to better job search</h2>
+  <div class="feature-grid">
+    <article class="feature-card">
+      <div class="feature-num">01</div>
+      <h3>Create account</h3>
+      <p class="muted">Register free and get {{ free_run_limit }} trial matches to try the product.</p>
+    </article>
+    <article class="feature-card">
+      <div class="feature-num">02</div>
+      <h3>Upload &amp; match</h3>
+      <p class="muted">Send your CV and target role. We search live sources and email CSV reports.</p>
+    </article>
+    <article class="feature-card">
+      <div class="feature-num">03</div>
+      <h3>Subscribe</h3>
+      <p class="muted">Choose 1 month or 1 year when you need unlimited matching access.</p>
+    </article>
+  </div>
+
+  <div class="eyebrow" style="margin-top:36px;">Plans</div>
+  <h2 class="section-title">Simple pricing</h2>
+  <div class="plan-grid">
+    {% for plan in plans %}
+    <article class="plan-card {% if plan.featured %}featured{% endif %}">
+      {% if plan.featured %}<div class="plan-ribbon">Best value</div>{% endif %}
+      <h3>{{ plan.name }}</h3>
+      <div class="price">LKR {{ '{:,}'.format(plan.price_lkr) }}</div>
+      <p class="muted">{{ plan.tagline }}</p>
+      <ul class="plan-list">
+        {% for item in plan.features %}
+        <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+      <a class="btn {% if not plan.featured %}secondary{% endif %}" href="{{ plan.cta_href }}">{{ plan.cta_label }}</a>
+    </article>
+    {% endfor %}
+  </div>
+
+  <div class="contact-banner">
+    <div>
+      <strong>Questions or ideas?</strong>
+      <p class="muted" style="margin:6px 0 0;">Contact support or send product feedback anytime.</p>
+    </div>
+    <div class="actions">
+      <a class="btn secondary" href="/contact">Contact us</a>
+      <a class="btn secondary" href="/feedback">Feedback</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

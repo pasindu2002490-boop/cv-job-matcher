@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Admin · CareerSync{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="eyebrow">Admin</div>
+  <h1>Manage CareerSync</h1>
+  <p class="intro">Users, free trials, subscriptions, payments, and feedback.</p>
+  {% if message %}<div class="ok">{{ message }}</div>{% endif %}
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+  <div class="actions" style="margin-bottom:18px;">
+    <a class="btn secondary" href="/admin">Users</a>
+    <a class="btn secondary" href="/admin/payments">Pending payments</a>
+    <a class="btn secondary" href="/admin/feedback">Feedback</a>
+  </div>
+
+  <h2>Users ({{ users|length }})</h2>
+  <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Role</th>
+          <th>Free runs</th>
+          <th>Subscription</th>
+          <th>Created</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in users %}
+        <tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:10px;">
+              {% if row.user.avatar_path %}
+                <img class="user-avatar" src="{{ url_for('avatar_media', filename=row.user.avatar_path) }}" alt="">
+              {% else %}
+                <span class="user-avatar placeholder">{{ (row.user.display_name or row.user.email)[:1]|upper }}</span>
+              {% endif %}
+              <div>
+                <strong>{{ row.user.display_name or row.user.email.split('@')[0] }}</strong><br>
+                <span class="muted">{{ row.user.email }}</span>
+              </div>
+            </div>
+          </td>
+          <td>{{ 'Admin' if row.user.is_admin else 'User' }}</td>
+          <td>{{ row.user.free_runs_used }} / {{ free_run_limit }}</td>
+          <td>
+            {% if row.subscription and row.subscription.status == 'active' %}
+              Active until {{ row.subscription.ends_at }}
+            {% elif row.subscription %}
+              {{ row.subscription.status }}
+            {% else %}
+              None
+            {% endif %}
+          </td>
+          <td>{{ row.user.created_at[:10] }}</td>
+          <td>
+            <div style="display:grid;gap:8px;min-width:220px;">
+              <form method="post" action="/admin/users/{{ row.user.id }}/toggle-admin">
+                <button class="secondary" type="submit">
+                  {{ 'Remove admin' if row.user.is_admin else 'Make admin' }}
+                </button>
+              </form>
+              <form method="post" action="/admin/users/{{ row.user.id }}/reset-free-runs">
+                <button class="secondary" type="submit">Reset free runs</button>
+              </form>
+              <form method="post" action="/admin/users/{{ row.user.id }}/grant">
+                <select name="plan">
+                  <option value="monthly">Grant 1 month</option>
+                  <option value="yearly">Grant 1 year</option>
+                </select>
+                <button type="submit">Grant plan</button>
+              </form>
+              {% if row.user.id != user.id %}
+              <form method="post" action="/admin/users/{{ row.user.id }}/delete" onsubmit="return confirm('Delete this user permanently?');">
+                <button class="secondary" type="submit">Delete user</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

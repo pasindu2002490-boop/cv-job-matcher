@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Edit profile · CareerSync{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="eyebrow">Account</div>
+  <h1>Edit profile</h1>
+  <p class="intro">Update your name, photo, or password.</p>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  {% if message %}<div class="ok">{{ message }}</div>{% endif %}
+
+  <div class="pay-grid">
+    <section class="pay-panel">
+      <h2>Profile</h2>
+      <form method="post" action="/profile" enctype="multipart/form-data">
+        <label>Display name
+          <input type="text" name="display_name" value="{{ user.display_name }}" required>
+        </label>
+        <label>Email
+          <input type="email" value="{{ user.email }}" disabled>
+        </label>
+        <label>Profile photo
+          <input type="file" name="avatar" accept=".png,.jpg,.jpeg,.webp">
+          <small class="muted">PNG, JPG or WebP — max 2 MB</small>
+        </label>
+        <label>New password (optional)
+          <input type="password" name="password" minlength="8" placeholder="Leave blank to keep current">
+        </label>
+        <label>Confirm new password
+          <input type="password" name="password_confirm" minlength="8">
+        </label>
+        <button type="submit">Save profile</button>
+      </form>
+    </section>
+    <section class="pay-panel">
+      <h2>Preview</h2>
+      <div style="display:flex;align-items:center;gap:14px;">
+        {% if user.avatar_path %}
+          <img class="user-avatar" style="width:64px;height:64px;" src="{{ url_for('avatar_media', filename=user.avatar_path) }}" alt="">
+        {% else %}
+          <span class="user-avatar placeholder" style="width:64px;height:64px;font-size:1.4rem;">{{ (user.display_name or user.email)[:1]|upper }}</span>
+        {% endif %}
+        <div>
+          <strong>{{ user.display_name or user.email.split('@')[0] }}</strong>
+          <p class="muted" style="margin:4px 0 0;">{{ user.email }}</p>
+        </div>
+      </div>
+      <div class="actions" style="margin-top:18px;">
+        <a class="btn secondary" href="/app">Matcher</a>
+        <a class="btn secondary" href="/subscribe">Subscribe</a>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

@@ -9,199 +9,375 @@
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='logo.svg') }}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg0: #06101f;
-      --bg1: #0b1730;
-      --panel: rgba(12, 24, 48, 0.88);
-      --line: #2a4570;
-      --text: #f4f8ff;
-      --muted: #93a6c4;
-      --cyan: #2ad4ff;
-      --mint: #61efc0;
-      --danger: #ffd0da;
-      --danger-bg: #5d1b2d;
-      --ok: #b8ffe8;
-      --ok-bg: #123d34;
-      --shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
-      --radius: 22px;
-      --font-display: "Syne", sans-serif;
-      --font-body: "Manrope", sans-serif;
+      --ink: #14201a;
+      --forest: #18352a;
+      --lime: #c8f23a;
+      --mint: #2f8f6b;
+      --paper: #eef3ee;
+      --panel: #f7faf7;
+      --line: #d0ddd4;
+      --muted: #5f6f66;
+      --danger: #7a1f32;
+      --danger-bg: #ffe4ea;
+      --ok: #124734;
+      --ok-bg: #def7e8;
+      --font-display: "Fraunces", Georgia, serif;
+      --font-body: "Outfit", sans-serif;
+      --radius: 20px;
     }
     * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
     body {
       margin: 0;
       min-height: 100vh;
-      padding: 28px 20px 40px;
-      color: var(--text);
+      color: var(--ink);
       font-family: var(--font-body);
       background:
-        radial-gradient(900px 420px at 12% -10%, rgba(42, 212, 255, 0.18), transparent 55%),
-        radial-gradient(700px 380px at 100% 0%, rgba(97, 239, 192, 0.12), transparent 50%),
-        linear-gradient(180deg, #0a162c 0%, var(--bg0) 55%, #050b16 100%);
+        radial-gradient(circle at 12% 18%, rgba(200, 242, 58, 0.28), transparent 34%),
+        radial-gradient(circle at 88% 8%, rgba(47, 143, 107, 0.18), transparent 36%),
+        linear-gradient(165deg, #f4f8f3 0%, var(--paper) 48%, #e5eee7 100%);
+      overflow-x: hidden;
     }
-    .shell { width: min(880px, 100%); margin: 0 auto; }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.35;
+      background-image:
+        linear-gradient(rgba(20, 32, 26, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(20, 32, 26, 0.03) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: radial-gradient(ellipse at center, black 35%, transparent 80%);
+    }
+    .shell {
+      width: min(1560px, calc(100% - 16px));
+      margin: 0 auto;
+      padding: 14px 0 36px;
+      position: relative;
+      z-index: 1;
+    }
+    .stage {
+      border: 1px solid rgba(24, 53, 42, 0.12);
+      border-radius: 24px;
+      background: #f7faf7;
+      box-shadow: 0 18px 48px rgba(20, 32, 26, 0.07);
+      overflow: hidden;
+      position: relative;
+      z-index: 1;
+      animation: rise 0.85s ease 0.08s both;
+    }
     nav {
       display: flex;
       justify-content: space-between;
       gap: 16px;
       align-items: center;
-      margin-bottom: 22px;
+      margin-bottom: 20px;
       flex-wrap: wrap;
+      position: relative;
+      z-index: 100;
+      animation: rise 0.7s ease both;
+    }
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+      flex: 1;
+    }
+    .user-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: var(--ink);
+      padding: 6px 10px 6px 6px;
+      border-radius: 999px;
+      background: white;
+      border: 1px solid var(--line);
+      max-width: min(280px, 42vw);
+      min-width: 0;
+    }
+    .user-badge:hover { border-color: rgba(47, 143, 107, 0.45); }
+    .user-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #18352a;
+      flex: 0 0 auto;
+    }
+    .user-avatar.placeholder {
+      display: grid;
+      place-items: center;
+      color: #c8f23a;
+      font-size: 0.85rem;
+      font-weight: 800;
+    }
+    .user-badge-copy {
+      min-width: 0;
+      display: grid;
+      gap: 1px;
+    }
+    .user-badge-name {
+      font-weight: 750;
+      font-size: 0.9rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .user-badge-meta {
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 600;
     }
     .brand {
       display: inline-flex;
       align-items: center;
       gap: 12px;
       text-decoration: none;
-      color: var(--text);
+      color: var(--ink);
+      flex: 0 0 auto;
     }
     .brand img {
-      width: 40px;
-      height: 40px;
-      border-radius: 12px;
-      box-shadow: 0 10px 28px rgba(42, 212, 255, 0.2);
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
     }
-    .brand-copy { display: grid; gap: 2px; line-height: 1.1; }
+    .brand-copy { display: grid; gap: 2px; line-height: 1.05; }
     .brand-name {
       font-family: var(--font-display);
       font-weight: 800;
-      letter-spacing: 0.02em;
-      font-size: 1.15rem;
+      font-size: 1.35rem;
+      letter-spacing: -0.02em;
     }
     .brand-tag {
-      color: var(--cyan);
+      color: var(--mint);
       font-size: 0.72rem;
       font-weight: 700;
-      letter-spacing: 0.14em;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
     }
-    nav .links { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .nav-toggle {
+      display: none;
+      width: 44px;
+      height: 44px;
+      border: 1.5px solid rgba(24, 53, 42, 0.2);
+      border-radius: 12px;
+      background: white;
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 5px;
+      padding: 0;
+      box-shadow: none;
+    }
+    .nav-toggle:hover { transform: none; background: #f4faf5; }
+    .nav-toggle span {
+      display: block;
+      width: 18px;
+      height: 2px;
+      background: var(--forest);
+      border-radius: 2px;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+    nav.is-open .nav-toggle span:nth-child(1) {
+      transform: translateY(7px) rotate(45deg);
+    }
+    nav.is-open .nav-toggle span:nth-child(2) { opacity: 0; }
+    nav.is-open .nav-toggle span:nth-child(3) {
+      transform: translateY(-7px) rotate(-45deg);
+    }
+    nav .links {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
     nav .links a, nav .links span {
-      color: #b8cdf0;
+      color: var(--forest);
       text-decoration: none;
       font-weight: 650;
-      font-size: 0.92rem;
-      padding: 8px 12px;
-      border-radius: 999px;
+      font-size: 0.95rem;
+      padding: 9px 14px;
+      border-radius: 12px;
     }
-    nav .links a:hover { background: rgba(255,255,255,0.06); color: white; }
-    main {
-      padding: 36px;
-      border: 1px solid rgba(84, 126, 190, 0.35);
-      border-radius: var(--radius);
-      background: var(--panel);
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(10px);
+    nav .links a:hover { background: rgba(24, 53, 42, 0.08); }
+
+    main { padding: 0; }
+    .page { padding: 34px clamp(20px, 3vw, 48px) 44px; }
+    .hero {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 0;
+      min-height: min(82vh, 680px);
+      align-items: stretch;
+    }
+    .hero-copy {
+      padding: clamp(28px, 5vw, 56px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .hero-visual {
+      position: relative;
+      background:
+        linear-gradient(160deg, #18352a 0%, #214838 55%, #2f8f6b 100%);
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      min-height: 320px;
+    }
+    .hero-visual::before {
+      content: "";
+      position: absolute;
+      width: 420px;
+      height: 420px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(200, 242, 58, 0.35), transparent 68%);
+      top: -80px;
+      right: -60px;
+      animation: drift 8s ease-in-out infinite alternate;
+    }
+    .hero-visual img {
+      width: min(92%, 460px);
+      position: relative;
+      z-index: 1;
+      animation: floaty 5.5s ease-in-out infinite;
     }
     .eyebrow {
-      color: var(--cyan);
+      color: var(--mint);
       font-weight: 800;
       letter-spacing: 0.14em;
       text-transform: uppercase;
       font-size: 0.78rem;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
     h1 {
-      margin: 0 0 12px;
+      margin: 0 0 14px;
       font-family: var(--font-display);
-      font-size: clamp(2rem, 5vw, 3.1rem);
-      line-height: 1.02;
-      letter-spacing: -0.02em;
+      font-size: clamp(2.4rem, 6vw, 4.2rem);
+      line-height: 0.98;
+      letter-spacing: -0.03em;
+      color: var(--ink);
+    }
+    .hero h1 span {
+      display: block;
+      color: var(--forest);
+      background: linear-gradient(90deg, var(--forest), var(--mint));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
     }
     h2 {
-      margin: 22px 0 8px;
+      margin: 18px 0 8px;
       font-family: var(--font-display);
-      font-size: 1.2rem;
-      color: #eaf2ff;
+      font-size: 1.35rem;
+      color: var(--forest);
     }
-    .intro, p { color: var(--muted); line-height: 1.65; }
-    form { display: grid; gap: 16px; margin-top: 20px; }
-    label { display: grid; gap: 8px; font-weight: 700; color: #e7eefc; }
+    .intro, p { color: var(--muted); line-height: 1.65; font-size: 1.05rem; }
+    .lead {
+      font-size: 1.15rem;
+      max-width: 34ch;
+      color: #4a5b52;
+      margin: 0 0 22px;
+    }
+    form { display: grid; gap: 16px; margin-top: 18px; }
+    label { display: grid; gap: 8px; font-weight: 700; color: var(--forest); }
     input, textarea, select {
       width: 100%;
-      padding: 13px 14px;
+      padding: 14px 15px;
       border: 1px solid var(--line);
-      border-radius: 12px;
-      background: #081426;
-      color: white;
+      border-radius: 14px;
+      background: white;
+      color: var(--ink);
       font: inherit;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
     }
     input:focus, textarea:focus {
-      outline: 2px solid rgba(42, 212, 255, 0.55);
-      border-color: transparent;
+      outline: none;
+      border-color: var(--mint);
+      box-shadow: 0 0 0 4px rgba(47, 143, 107, 0.15);
     }
     button, .btn {
       border: 0;
       border-radius: 14px;
-      padding: 14px 18px;
+      padding: 15px 20px;
       font: inherit;
       font-weight: 800;
-      color: #03111c;
-      background: linear-gradient(105deg, var(--cyan), var(--mint));
+      color: var(--ink);
+      background: var(--lime);
       cursor: pointer;
       text-decoration: none;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      box-shadow: 0 12px 30px rgba(42, 212, 255, 0.2);
-      transition: transform 0.15s ease, filter 0.15s ease;
+      transition: transform 0.18s ease, background 0.18s ease;
     }
-    button:hover, .btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+    button:hover, .btn:hover { transform: translateY(-2px); background: #d5ff4d; }
     button.secondary, .btn.secondary {
-      background: #152846;
-      color: #dce9ff;
-      box-shadow: none;
-      border: 1px solid #2d4d7d;
+      background: transparent;
+      color: var(--forest);
+      border: 1.5px solid rgba(24, 53, 42, 0.25);
     }
-    .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
-    .error {
-      padding: 12px 14px;
-      border-radius: 12px;
-      background: var(--danger-bg);
-      color: var(--danger);
-      margin: 16px 0;
-      border: 1px solid rgba(255, 150, 170, 0.25);
+    button.secondary:hover, .btn.secondary:hover { background: rgba(24, 53, 42, 0.05); }
+    .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+    .error, .ok, .badge, .notice {
+      padding: 13px 15px;
+      border-radius: 14px;
+      margin: 14px 0;
+      font-weight: 600;
     }
-    .ok {
-      padding: 12px 14px;
-      border-radius: 12px;
-      background: var(--ok-bg);
-      color: var(--ok);
-      margin: 16px 0;
-      border: 1px solid rgba(97, 239, 192, 0.25);
-    }
-    .badge {
+    .error { background: var(--danger-bg); color: var(--danger); }
+    .ok { background: var(--ok-bg); color: var(--ok); }
+    .badge, .notice {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 8px 12px;
-      border-radius: 999px;
-      background: rgba(42, 212, 255, 0.1);
-      border: 1px solid rgba(42, 212, 255, 0.28);
-      color: #c9f4ff;
-      font-size: 0.88rem;
-      font-weight: 700;
-      margin: 8px 0 4px;
+      background: rgba(200, 242, 58, 0.28);
+      color: var(--forest);
+      border: 1px solid rgba(24, 53, 42, 0.12);
+      font-size: 0.92rem;
     }
     .price {
       font-family: var(--font-display);
-      font-size: 2.6rem;
+      font-size: clamp(2.4rem, 5vw, 3.4rem);
       font-weight: 800;
-      color: var(--mint);
-      margin: 8px 0;
+      color: var(--forest);
+      margin: 6px 0;
+      letter-spacing: -0.03em;
     }
-    .bank {
-      background: #081426;
+    .pay-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-top: 22px;
+      align-items: start;
+    }
+    .pay-panel {
+      background: white;
       border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: 18px;
-      margin: 18px 0;
+      border-radius: 18px;
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
     }
+    .pay-panel::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto auto 0;
+      width: 100%;
+      height: 5px;
+      background: linear-gradient(90deg, var(--lime), var(--mint));
+    }
+    .pay-panel h2 { margin-top: 6px; }
     .bank dt { color: var(--muted); font-size: 0.85rem; margin-top: 10px; }
-    .bank dd { margin: 4px 0 0; font-weight: 800; }
+    .bank dd { margin: 4px 0 0; font-weight: 800; color: var(--ink); }
     table { width: 100%; border-collapse: collapse; margin-top: 16px; }
     th, td {
       text-align: left;
@@ -222,7 +398,7 @@
       display: flex;
       flex-wrap: wrap;
       gap: 18px;
-      color: #cfdaed;
+      color: var(--forest);
     }
     .checks label {
       display: flex;
@@ -231,7 +407,32 @@
       font-weight: 500;
     }
     .checks input { width: auto; }
+    .visual-strip {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 18px;
+      align-items: center;
+      background: var(--forest);
+      color: #e8f5ec;
+      border-radius: 18px;
+      padding: 16px;
+      margin: 18px 0;
+      overflow: hidden;
+    }
+    .visual-strip img {
+      width: 100%;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.06);
+    }
+    .visual-strip p { color: #c7ddd1; margin: 6px 0 0; }
+    .visual-strip strong {
+      font-family: var(--font-display);
+      font-size: 1.25rem;
+      color: var(--lime);
+    }
     ul.intro { padding-left: 1.2rem; }
+    a.inline { color: var(--mint); font-weight: 700; text-decoration: none; }
+    a.inline:hover { text-decoration: underline; }
     footer.site-footer {
       margin-top: 18px;
       display: flex;
@@ -239,35 +440,192 @@
       flex-wrap: wrap;
       font-size: 0.9rem;
       align-items: center;
+      animation: rise 0.9s ease 0.16s both;
     }
     footer.site-footer a {
-      color: #8ea4c4;
+      color: var(--muted);
       text-decoration: none;
       font-weight: 600;
     }
-    footer.site-footer a:hover { color: white; }
-    @media (max-width: 720px) {
-      .grid-2, .match-form { grid-template-columns: 1fr; }
-      main { padding: 24px 18px; }
-      body { padding: 18px 14px 28px; }
+    footer.site-footer a:hover { color: var(--forest); }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(14px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes floaty {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    @keyframes drift {
+      from { transform: translate(0, 0); }
+      to { transform: translate(-24px, 18px); }
+    }
+    .contact-banner {
+      margin-top: 28px;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+      padding: 20px;
+      border-radius: 18px;
+      background: white;
+      border: 1px solid var(--line);
+    }
+    .home-sections .section-title {
+      font-family: var(--font-display);
+      font-size: clamp(1.6rem, 3vw, 2.2rem);
+      margin: 0 0 18px;
+      letter-spacing: -0.02em;
+    }
+    .feature-grid, .plan-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .feature-card, .plan-card {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 20px;
+      position: relative;
+    }
+    .feature-num {
+      font-family: var(--font-display);
+      font-size: 1.6rem;
+      color: var(--mint);
+      font-weight: 800;
+    }
+    .feature-card h3, .plan-card h3 {
+      margin: 8px 0;
+      font-family: var(--font-display);
+      font-size: 1.25rem;
+    }
+    .plan-card.featured {
+      border-color: rgba(47, 143, 107, 0.45);
+      background: linear-gradient(180deg, #f7ffe8 0%, #ffffff 42%);
+    }
+    .plan-ribbon {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: var(--lime);
+      color: var(--ink);
+      font-size: 0.75rem;
+      font-weight: 800;
+      padding: 5px 9px;
+      border-radius: 8px;
+    }
+    .plan-list {
+      margin: 12px 0 18px;
+      padding-left: 1.1rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+    .plan-list li { margin: 6px 0; }
+    @media (max-width: 900px) {
+      .feature-grid, .plan-grid { grid-template-columns: 1fr; }
+      .hero { grid-template-columns: 1fr; min-height: auto; }
+      .hero-visual { min-height: 280px; order: -1; }
+      .pay-grid, .grid-2, .match-form { grid-template-columns: 1fr; }
+      .visual-strip { grid-template-columns: 1fr; }
+      nav {
+        flex-wrap: nowrap;
+        align-items: center;
+      }
+      .nav-toggle { display: inline-flex; }
+      nav .links {
+        display: none;
+        position: absolute;
+        top: calc(100% + 8px);
+        left: 0;
+        right: 0;
+        z-index: 120;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 2px;
+        padding: 10px;
+        border-radius: 16px;
+        background: #ffffff;
+        border: 1px solid var(--line);
+        box-shadow: 0 16px 40px rgba(20, 32, 26, 0.16);
+      }
+      nav.is-open .links {
+        display: flex;
+      }
+      nav:not(.is-open) .links {
+        display: none !important;
+        visibility: hidden;
+        pointer-events: none;
+      }
+      nav .links a, nav .links span {
+        width: 100%;
+        padding: 13px 14px;
+        border-radius: 12px;
+        background: #ffffff;
+      }
+    }
+    @media (max-width: 640px) {
+      .shell { width: calc(100% - 10px); }
+      .page, .hero-copy { padding: 22px 16px; }
+      .brand-tag { display: none; }
+      .user-badge-meta { display: none; }
+      .user-badge { max-width: min(160px, 38vw); padding-right: 8px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+      }
     }
   </style>
 </head>
 <body>
   <div class="shell">
-    <nav>
-      <a class="brand" href="/">
-        <img src="{{ url_for('static', filename='logo.svg') }}" alt="CareerSync logo" width="40" height="40">
-        <span class="brand-copy">
-          <span class="brand-name">CareerSync</span>
-          <span class="brand-tag">Job matching</span>
-        </span>
-      </a>
-      <div class="links">
+    <nav id="site-nav">
+      <div class="nav-left">
+        <a class="brand" href="/">
+          <img src="{{ url_for('static', filename='logo.svg') }}" alt="CareerSync logo" width="44" height="44">
+          <span class="brand-copy">
+            <span class="brand-name">CareerSync</span>
+            <span class="brand-tag">Live CV matching</span>
+          </span>
+        </a>
         {% if user %}
-          <span class="muted">{{ user.email }}</span>
+        <a class="user-badge" href="/profile" title="Edit profile">
+          {% if user.avatar_path %}
+            <img class="user-avatar" src="{{ url_for('avatar_media', filename=user.avatar_path) }}" alt="">
+          {% else %}
+            <span class="user-avatar placeholder">{{ (user.display_name or user.email)[:1]|upper }}</span>
+          {% endif %}
+          <span class="user-badge-copy">
+            <span class="user-badge-name">{{ user.display_name or user.email.split('@')[0] }}</span>
+            <span class="user-badge-meta">Edit profile</span>
+          </span>
+        </a>
+        {% endif %}
+      </div>
+      <button
+        class="nav-toggle"
+        type="button"
+        id="nav-toggle"
+        aria-controls="nav-links"
+        aria-expanded="false"
+        aria-label="Open menu"
+      >
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+      <div class="links" id="nav-links">
+        <a href="/">Home</a>
+        <a href="/pricing">Plans</a>
+        <a href="/contact">Contact</a>
+        <a href="/feedback">Feedback</a>
+        <a href="/app">Matcher</a>
+        {% if user %}
           <a href="/subscribe">Subscribe</a>
-          {% if user.is_admin %}<a href="/admin/payments">Admin</a>{% endif %}
+          {% if user.is_admin %}<a href="/admin">Admin</a>{% endif %}
           <a href="/logout">Logout</a>
         {% else %}
           <a href="/login">Login</a>
@@ -275,15 +633,40 @@
         {% endif %}
       </div>
     </nav>
-    <main>
-      {% block content %}{% endblock %}
-    </main>
+    <div class="stage">
+      <main>
+        {% block content %}{% endblock %}
+      </main>
+    </div>
     <footer class="site-footer">
-      <img src="{{ url_for('static', filename='favicon.svg') }}" alt="" width="18" height="18" style="border-radius:5px;opacity:.9;">
+      <img src="{{ url_for('static', filename='favicon.svg') }}" alt="" width="18" height="18" style="border-radius:5px;">
       <a href="/privacy">Privacy Policy</a>
       <a href="/terms">Terms &amp; Conditions</a>
       <a href="/refund">Return &amp; Refund Policy</a>
+      <a href="/feedback">Feedback</a>
     </footer>
   </div>
+  <script>
+    (function () {
+      const nav = document.getElementById('site-nav');
+      const toggle = document.getElementById('nav-toggle');
+      if (!nav || !toggle) return;
+      const setOpen = (open) => {
+        nav.classList.toggle('is-open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+      };
+      toggle.addEventListener('click', () => setOpen(!nav.classList.contains('is-open')));
+      nav.querySelectorAll('.links a').forEach((link) => {
+        link.addEventListener('click', () => setOpen(false));
+      });
+      document.addEventListener('click', (event) => {
+        if (!nav.contains(event.target)) setOpen(false);
+      });
+      window.addEventListener('resize', () => {
+        if (window.innerWidth > 900) setOpen(false);
+      });
+    })();
+  </script>
 </body>
 </html>
