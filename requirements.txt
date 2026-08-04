@@ -1,0 +1,6 @@
+# Lean free-tier web deploy (Render / Docker).
+# crawl4ai and psycopg are optional extras for local/cloud inventory features.
+pypdf>=4.0
+flask>=3.0
+python-dotenv>=1.0
+gunicorn>=22.0

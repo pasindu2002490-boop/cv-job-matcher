@@ -18,7 +18,7 @@ from werkzeug.utils import secure_filename
 
 from .job_sources import default_providers
 from .llm_filter import warm_ollama_fallback
-from .mailer import MailSettings, send_results_email
+from .mailer import send_results_email
 from .runner import RunOptions, run_match
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
@@ -53,26 +53,33 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.get("/health")
     def health():
         ollama_reachable, ollama_model_available = _ollama_runtime_status()
+        openai_configured = bool(os.getenv("OPENAI_API_KEY", "").strip())
         groq_configured = bool(os.getenv("GROQ_API_KEY", "").strip())
+        llm_provider = (
+            os.getenv("LLM_PROVIDER", "auto").strip().lower() or "auto"
+        )
         return jsonify(
             {
                 "status": "ok",
                 "architecture": "concurrent-source-fan-out/single-final-llm",
-                "llm_strategy": "groq-first/ollama-fallback",
+                "llm_strategy": llm_provider,
+                "llm_provider": llm_provider,
                 "configured_source_agents": len(default_providers()),
                 "crawl4ai_enabled": os.getenv("CRAWL4AI_ENABLED", "").lower()
                 in {"1", "true", "yes"},
+                "openai_configured": openai_configured,
                 "groq_configured": groq_configured,
                 "ollama_fallback_enabled": _environment_flag(
                     "OLLAMA_FALLBACK_ENABLED", True
                 ),
                 "ollama_reachable": ollama_reachable,
                 "ollama_model_available": ollama_model_available,
-                "llm_configured": groq_configured or ollama_model_available,
-                "smtp_configured": bool(
-                    os.getenv("SMTP_HOST", "").strip()
-                    and os.getenv("SMTP_FROM", "").strip()
+                "llm_configured": (
+                    openai_configured
+                    or groq_configured
+                    or ollama_model_available
                 ),
+                "smtp_configured": _smtp_configured(),
             }
         )
 
@@ -87,26 +94,21 @@ def create_app(test_config: dict | None = None) -> Flask:
         error = _validate_submission(upload, email, country, position, experience_raw)
         if error:
             return render_template("index.html", error=error), 400
-        try:
-            MailSettings.from_environment()
-        except (RuntimeError, ValueError) as exc:
-            return render_template(
-                "index.html",
-                error=f"Email delivery is not configured: {exc}",
-            ), 503
-        if not os.getenv("GROQ_API_KEY", "").strip():
-            _, ollama_model_available = _ollama_runtime_status()
-        else:
-            ollama_model_available = False
-        if (
-            not os.getenv("GROQ_API_KEY", "").strip()
-            and not ollama_model_available
-        ):
+        if not _smtp_configured():
             return render_template(
                 "index.html",
                 error=(
-                    "Final LLM review is not configured. Set GROQ_API_KEY, or "
-                    "enable Ollama and install the configured local model."
+                    "Email delivery is not configured: "
+                    "Email is not configured. Set SMTP_HOST and SMTP_FROM."
+                ),
+            ), 503
+        if not _llm_configured():
+            return render_template(
+                "index.html",
+                error=(
+                    "Final LLM review is not configured. Set OPENAI_API_KEY or "
+                    "GROQ_API_KEY, or enable Ollama and install the configured "
+                    "local model."
                 ),
             ), 503
 
@@ -209,6 +211,7 @@ def _process_submission(
                 name=f"ollama-warm-{task_id[:8]}",
                 daemon=True,
             ).start()
+        llm_provider, llm_model = _resolve_web_llm()
         summary = run_match(RunOptions(
             cv_path=cv_path,
             country=country,
@@ -218,8 +221,8 @@ def _process_submission(
             include_remote_global=include_remote_global,
             web_discovery=web_discovery,
             llm_filter=True,
-            llm_provider="groq",
-            llm_model=os.getenv("GROQ_MODEL", "openai/gpt-oss-20b"),
+            llm_provider=llm_provider,
+            llm_model=llm_model,
             llm_limit=int(os.getenv("LLM_LIMIT", "500")),
             llm_strict=True,
             llm_batch_size=int(os.getenv("LLM_BATCH_SIZE", "5")),
@@ -258,6 +261,41 @@ def _process_submission(
             cv_path.parent.rmdir()
         except OSError:
             pass
+
+
+def _smtp_configured() -> bool:
+    return bool(
+        os.getenv("SMTP_HOST", "").strip() and os.getenv("SMTP_FROM", "").strip()
+    )
+
+
+def _llm_configured() -> bool:
+    if os.getenv("OPENAI_API_KEY", "").strip():
+        return True
+    if os.getenv("GROQ_API_KEY", "").strip():
+        return True
+    _, ollama_model_available = _ollama_runtime_status()
+    return ollama_model_available
+
+
+def _resolve_web_llm() -> tuple[str, str]:
+    provider = (os.getenv("LLM_PROVIDER", "auto").strip().lower() or "auto")
+    if provider == "openai" or (
+        provider == "auto" and os.getenv("OPENAI_API_KEY", "").strip()
+    ):
+        return (
+            "openai",
+            os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini",
+        )
+    if provider == "groq" or (
+        provider == "auto" and os.getenv("GROQ_API_KEY", "").strip()
+    ):
+        return (
+            "groq",
+            os.getenv("GROQ_MODEL", "openai/gpt-oss-20b").strip()
+            or "openai/gpt-oss-20b",
+        )
+    return provider, os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
 
 
 def _environment_flag(name: str, default: bool = False) -> bool:
