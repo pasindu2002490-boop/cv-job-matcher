@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Register · CareerSync{% endblock %}
+{% block content %}
+  <div class="eyebrow">Get started</div>
+  <h1>Create your account</h1>
+  <p class="intro">Register once and get {{ free_run_limit }} free matches. Subscribe later for unlimited access.</p>
+  <div class="badge">{{ free_run_limit }} free matches · then LKR {{ price }} / 30 days</div>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="post" action="/register">
+    <label>Email
+      <input type="email" name="email" required>
+    </label>
+    <label>Password
+      <input type="password" name="password" minlength="8" required>
+    </label>
+    <label>Confirm password
+      <input type="password" name="password_confirm" minlength="8" required>
+    </label>
+    <button type="submit">Create account &amp; start free</button>
+  </form>
+  <p class="muted" style="margin-top:18px;">Already registered? <a href="/login" style="color:#2ad4ff;">Login</a></p>
+{% endblock %}

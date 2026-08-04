@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="CareerSync turns your CV into live job matches and emails CSV reports.">
+  <title>{% block title %}CareerSync{% endblock %}</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='logo.svg') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg0: #06101f;
+      --bg1: #0b1730;
+      --panel: rgba(12, 24, 48, 0.88);
+      --line: #2a4570;
+      --text: #f4f8ff;
+      --muted: #93a6c4;
+      --cyan: #2ad4ff;
+      --mint: #61efc0;
+      --danger: #ffd0da;
+      --danger-bg: #5d1b2d;
+      --ok: #b8ffe8;
+      --ok-bg: #123d34;
+      --shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
+      --radius: 22px;
+      --font-display: "Syne", sans-serif;
+      --font-body: "Manrope", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 28px 20px 40px;
+      color: var(--text);
+      font-family: var(--font-body);
+      background:
+        radial-gradient(900px 420px at 12% -10%, rgba(42, 212, 255, 0.18), transparent 55%),
+        radial-gradient(700px 380px at 100% 0%, rgba(97, 239, 192, 0.12), transparent 50%),
+        linear-gradient(180deg, #0a162c 0%, var(--bg0) 55%, #050b16 100%);
+    }
+    .shell { width: min(880px, 100%); margin: 0 auto; }
+    nav {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 22px;
+      flex-wrap: wrap;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--text);
+    }
+    .brand img {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      box-shadow: 0 10px 28px rgba(42, 212, 255, 0.2);
+    }
+    .brand-copy { display: grid; gap: 2px; line-height: 1.1; }
+    .brand-name {
+      font-family: var(--font-display);
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      font-size: 1.15rem;
+    }
+    .brand-tag {
+      color: var(--cyan);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    nav .links { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    nav .links a, nav .links span {
+      color: #b8cdf0;
+      text-decoration: none;
+      font-weight: 650;
+      font-size: 0.92rem;
+      padding: 8px 12px;
+      border-radius: 999px;
+    }
+    nav .links a:hover { background: rgba(255,255,255,0.06); color: white; }
+    main {
+      padding: 36px;
+      border: 1px solid rgba(84, 126, 190, 0.35);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+    .eyebrow {
+      color: var(--cyan);
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-size: 0.78rem;
+      margin-bottom: 10px;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-family: var(--font-display);
+      font-size: clamp(2rem, 5vw, 3.1rem);
+      line-height: 1.02;
+      letter-spacing: -0.02em;
+    }
+    h2 {
+      margin: 22px 0 8px;
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      color: #eaf2ff;
+    }
+    .intro, p { color: var(--muted); line-height: 1.65; }
+    form { display: grid; gap: 16px; margin-top: 20px; }
+    label { display: grid; gap: 8px; font-weight: 700; color: #e7eefc; }
+    input, textarea, select {
+      width: 100%;
+      padding: 13px 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #081426;
+      color: white;
+      font: inherit;
+    }
+    input:focus, textarea:focus {
+      outline: 2px solid rgba(42, 212, 255, 0.55);
+      border-color: transparent;
+    }
+    button, .btn {
+      border: 0;
+      border-radius: 14px;
+      padding: 14px 18px;
+      font: inherit;
+      font-weight: 800;
+      color: #03111c;
+      background: linear-gradient(105deg, var(--cyan), var(--mint));
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 12px 30px rgba(42, 212, 255, 0.2);
+      transition: transform 0.15s ease, filter 0.15s ease;
+    }
+    button:hover, .btn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+    button.secondary, .btn.secondary {
+      background: #152846;
+      color: #dce9ff;
+      box-shadow: none;
+      border: 1px solid #2d4d7d;
+    }
+    .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
+    .error {
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--danger-bg);
+      color: var(--danger);
+      margin: 16px 0;
+      border: 1px solid rgba(255, 150, 170, 0.25);
+    }
+    .ok {
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--ok-bg);
+      color: var(--ok);
+      margin: 16px 0;
+      border: 1px solid rgba(97, 239, 192, 0.25);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(42, 212, 255, 0.1);
+      border: 1px solid rgba(42, 212, 255, 0.28);
+      color: #c9f4ff;
+      font-size: 0.88rem;
+      font-weight: 700;
+      margin: 8px 0 4px;
+    }
+    .price {
+      font-family: var(--font-display);
+      font-size: 2.6rem;
+      font-weight: 800;
+      color: var(--mint);
+      margin: 8px 0;
+    }
+    .bank {
+      background: #081426;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px;
+      margin: 18px 0;
+    }
+    .bank dt { color: var(--muted); font-size: 0.85rem; margin-top: 10px; }
+    .bank dd { margin: 4px 0 0; font-weight: 800; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td {
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--line);
+      font-size: 0.95rem;
+    }
+    .muted { color: var(--muted); }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .match-form {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-top: 18px;
+    }
+    .match-form .full { grid-column: 1 / -1; }
+    .checks {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      color: #cfdaed;
+    }
+    .checks label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 500;
+    }
+    .checks input { width: auto; }
+    ul.intro { padding-left: 1.2rem; }
+    footer.site-footer {
+      margin-top: 18px;
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-size: 0.9rem;
+      align-items: center;
+    }
+    footer.site-footer a {
+      color: #8ea4c4;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    footer.site-footer a:hover { color: white; }
+    @media (max-width: 720px) {
+      .grid-2, .match-form { grid-template-columns: 1fr; }
+      main { padding: 24px 18px; }
+      body { padding: 18px 14px 28px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <nav>
+      <a class="brand" href="/">
+        <img src="{{ url_for('static', filename='logo.svg') }}" alt="CareerSync logo" width="40" height="40">
+        <span class="brand-copy">
+          <span class="brand-name">CareerSync</span>
+          <span class="brand-tag">Job matching</span>
+        </span>
+      </a>
+      <div class="links">
+        {% if user %}
+          <span class="muted">{{ user.email }}</span>
+          <a href="/subscribe">Subscribe</a>
+          {% if user.is_admin %}<a href="/admin/payments">Admin</a>{% endif %}
+          <a href="/logout">Logout</a>
+        {% else %}
+          <a href="/login">Login</a>
+          <a href="/register">Register</a>
+        {% endif %}
+      </div>
+    </nav>
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+    <footer class="site-footer">
+      <img src="{{ url_for('static', filename='favicon.svg') }}" alt="" width="18" height="18" style="border-radius:5px;opacity:.9;">
+      <a href="/privacy">Privacy Policy</a>
+      <a href="/terms">Terms &amp; Conditions</a>
+      <a href="/refund">Return &amp; Refund Policy</a>
+    </footer>
+  </div>
+</body>
+</html>

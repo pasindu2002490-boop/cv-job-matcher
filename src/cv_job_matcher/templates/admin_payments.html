@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Admin payments · CareerSync{% endblock %}
+{% block content %}
+  <h1>Pending payments</h1>
+  <p class="intro">Activate subscriptions after verifying bank transfers.</p>
+  {% if message %}<div class="ok">{{ message }}</div>{% endif %}
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  {% if not pending %}
+    <p class="muted">No pending payments.</p>
+  {% else %}
+    <table>
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Amount</th>
+          <th>Reference</th>
+          <th>Note</th>
+          <th>Created</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in pending %}
+        <tr>
+          <td>{{ item.email }}</td>
+          <td>LKR {{ item.subscription.amount_lkr }}</td>
+          <td>{{ item.subscription.reference }}</td>
+          <td>{{ item.subscription.note }}</td>
+          <td>{{ item.subscription.created_at }}</td>
+          <td>
+            <form method="post" action="/admin/payments/{{ item.subscription.id }}/activate">
+              <button type="submit">Activate 30 days</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endblock %}

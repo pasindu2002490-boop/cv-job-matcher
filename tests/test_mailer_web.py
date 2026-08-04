@@ -33,14 +33,77 @@ def test_results_email_attaches_all_csv_files(tmp_path: Path) -> None:
     assert message["To"] == "person@example.com"
 
 
-def test_web_form_rejects_missing_cv(tmp_path: Path) -> None:
-    app = create_app({
+def _make_app(tmp_path: Path):
+    return create_app({
         "TESTING": True,
         "UPLOAD_ROOT": tmp_path / "uploads",
         "OUTPUT_ROOT": tmp_path / "results",
+        "AUTH_DB_PATH": tmp_path / "auth.sqlite3",
+        "SECRET_KEY": "test-secret",
     })
 
+
+def _register(client, email: str = "person@example.com", password: str = "secret123") -> None:
+    assert client.post(
+        "/register",
+        data={"email": email, "password": password, "password_confirm": password},
+        follow_redirects=False,
+    ).status_code in {302, 303}
+
+
+def _register_and_subscribe(client, email: str = "person@example.com", password: str = "secret123") -> None:
+    _register(client, email=email, password=password)
+    from cv_job_matcher.auth_store import AuthStore
+
+    auth_db = Path(client.application.config["AUTH_DB_PATH"])
+    store = AuthStore(auth_db)
+    user = store.get_user_by_email(email)
+    assert user is not None
+    pending = store.create_payment_request(
+        user.id,
+        amount_lkr=1899,
+        payment_method="bank_transfer",
+        reference="TEST",
+        note="test",
+    )
+    assert store.activate_subscription(pending.id, days=30) is not None
+
+
+def test_submit_requires_login(tmp_path: Path) -> None:
+    app = _make_app(tmp_path)
     response = app.test_client().post("/submit", data={
+        "email": "person@example.com",
+        "country": "Sri Lanka",
+        "position": "AI Engineer",
+        "experience_years": "2",
+    })
+    assert response.status_code in {302, 303}
+    assert "/login" in response.headers.get("Location", "")
+
+
+def test_new_user_gets_free_matches_without_subscribe(tmp_path: Path) -> None:
+    app = _make_app(tmp_path)
+    client = app.test_client()
+    _register(client)
+    home = client.get("/")
+    assert home.status_code == 200
+    assert b"free matches" in home.data.lower() or b"Free trial" in home.data
+    response = client.post("/submit", data={
+        "email": "person@example.com",
+        "country": "Sri Lanka",
+        "position": "AI Engineer",
+        "experience_years": "2",
+    })
+    assert response.status_code == 400
+    assert b"Please select a CV file" in response.data
+
+
+def test_web_form_rejects_missing_cv(tmp_path: Path) -> None:
+    app = _make_app(tmp_path)
+    client = app.test_client()
+    _register_and_subscribe(client)
+
+    response = client.post("/submit", data={
         "email": "person@example.com",
         "country": "Sri Lanka",
         "position": "AI Engineer",
@@ -52,11 +115,7 @@ def test_web_form_rejects_missing_cv(tmp_path: Path) -> None:
 
 
 def test_health_endpoint(tmp_path: Path) -> None:
-    app = create_app({
-        "TESTING": True,
-        "UPLOAD_ROOT": tmp_path / "uploads",
-        "OUTPUT_ROOT": tmp_path / "results",
-    })
+    app = _make_app(tmp_path)
 
     response = app.test_client().get("/health")
 
@@ -75,15 +134,15 @@ def test_health_endpoint(tmp_path: Path) -> None:
     assert isinstance(payload["ollama_model_available"], bool)
     assert isinstance(payload["llm_configured"], bool)
     assert isinstance(payload["smtp_configured"], bool)
+    assert payload["subscription_price_lkr"] == 1899
 
 
 def test_web_form_rejects_invalid_email(tmp_path: Path) -> None:
-    app = create_app({
-        "TESTING": True,
-        "UPLOAD_ROOT": tmp_path / "uploads",
-        "OUTPUT_ROOT": tmp_path / "results",
-    })
-    response = app.test_client().post(
+    app = _make_app(tmp_path)
+    client = app.test_client()
+    _register_and_subscribe(client)
+
+    response = client.post(
         "/submit",
         data={
             "cv": (Path(__file__).open("rb"), "cv.txt"),
@@ -92,6 +151,7 @@ def test_web_form_rejects_invalid_email(tmp_path: Path) -> None:
             "position": "AI Engineer",
             "experience_years": "2",
         },
+        content_type="multipart/form-data",
     )
 
     assert response.status_code == 400
