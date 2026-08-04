@@ -18,6 +18,7 @@ class User:
     password_hash: str
     created_at: str
     is_admin: bool = False
+    free_runs_used: int = 0
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,7 @@ class AuthStore:
                     email TEXT NOT NULL UNIQUE COLLATE NOCASE,
                     password_hash TEXT NOT NULL,
                     is_admin INTEGER NOT NULL DEFAULT 0,
+                    free_runs_used INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS subscriptions (
@@ -80,6 +82,14 @@ class AuthStore:
                     ON subscriptions(user_id, status, ends_at);
                 """
             )
+            columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(users)").fetchall()
+            }
+            if "free_runs_used" not in columns:
+                connection.execute(
+                    "ALTER TABLE users ADD COLUMN free_runs_used INTEGER NOT NULL DEFAULT 0"
+                )
 
     def create_user(self, email: str, password: str, *, is_admin: bool = False) -> User:
         user = User(
@@ -88,18 +98,20 @@ class AuthStore:
             password_hash=generate_password_hash(password),
             created_at=_utcnow(),
             is_admin=is_admin,
+            free_runs_used=0,
         )
         with self._connect() as connection:
             connection.execute(
                 """
-                INSERT INTO users (id, email, password_hash, is_admin, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO users (id, email, password_hash, is_admin, free_runs_used, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     user.id,
                     user.email,
                     user.password_hash,
                     1 if is_admin else 0,
+                    user.free_runs_used,
                     user.created_at,
                 ),
             )
@@ -126,6 +138,29 @@ class AuthStore:
         if user is None or not check_password_hash(user.password_hash, password):
             return None
         return user
+
+    def free_runs_remaining(self, user_id: str, limit: int) -> int:
+        user = self.get_user(user_id)
+        if user is None:
+            return 0
+        return max(0, int(limit) - int(user.free_runs_used))
+
+    def consume_free_run(self, user_id: str, limit: int) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT free_runs_used FROM users WHERE id = ?",
+                (user_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            used = int(row["free_runs_used"] or 0)
+            if used >= int(limit):
+                return False
+            connection.execute(
+                "UPDATE users SET free_runs_used = ? WHERE id = ?",
+                (used + 1, user_id),
+            )
+            return True
 
     def create_payment_request(
         self,
@@ -178,18 +213,34 @@ class AuthStore:
         subscription_id: str,
         *,
         days: int = 30,
+        payment_reference: str | None = None,
     ) -> Subscription | None:
         starts = datetime.now(timezone.utc)
         ends = starts + timedelta(days=days)
         with self._connect() as connection:
-            connection.execute(
-                """
-                UPDATE subscriptions
-                SET status = 'active', starts_at = ?, ends_at = ?
-                WHERE id = ?
-                """,
-                (starts.isoformat(), ends.isoformat(), subscription_id),
-            )
+            if payment_reference:
+                connection.execute(
+                    """
+                    UPDATE subscriptions
+                    SET status = 'active', starts_at = ?, ends_at = ?, reference = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        starts.isoformat(),
+                        ends.isoformat(),
+                        payment_reference.strip(),
+                        subscription_id,
+                    ),
+                )
+            else:
+                connection.execute(
+                    """
+                    UPDATE subscriptions
+                    SET status = 'active', starts_at = ?, ends_at = ?
+                    WHERE id = ?
+                    """,
+                    (starts.isoformat(), ends.isoformat(), subscription_id),
+                )
             row = connection.execute(
                 "SELECT * FROM subscriptions WHERE id = ?",
                 (subscription_id,),
@@ -247,12 +298,14 @@ class AuthStore:
 
 
 def _user_from_row(row: sqlite3.Row) -> User:
+    keys = row.keys()
     return User(
         id=row["id"],
         email=row["email"],
         password_hash=row["password_hash"],
         created_at=row["created_at"],
         is_admin=bool(row["is_admin"]),
+        free_runs_used=int(row["free_runs_used"] if "free_runs_used" in keys else 0),
     )
 
 

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Subscribe · CareerSync{% endblock %}
+{% block content %}
+  <div class="eyebrow">Continue matching</div>
+  <h1>Subscribe to CareerSync</h1>
+  <p class="intro">Your {{ free_run_limit }} free matches are done (or you’re upgrading early). Choose bank transfer or PayHere for 30 days of access.</p>
+  <div class="price">LKR {{ price }}</div>
+  <p class="muted">One subscription · 30 days access</p>
+
+  {% if subscription and subscription.status == 'active' %}
+    <div class="ok">Your subscription is active until {{ subscription.ends_at }}.</div>
+    <a class="btn" href="/">Go to matcher</a>
+  {% else %}
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    {% if message %}<div class="ok">{{ message }}</div>{% endif %}
+
+    {% if subscription and subscription.status == 'pending' %}
+      <div class="ok">
+        Payment pending ({{ subscription.payment_method }}).
+        {% if subscription.payment_method == 'bank_transfer' %}
+          Waiting for admin confirmation. Ref: {{ subscription.reference or subscription.id[:8] }}
+        {% else %}
+          Complete checkout or wait a moment for card confirmation.
+        {% endif %}
+      </div>
+    {% endif %}
+
+    <div class="grid-2" style="margin-top:24px;align-items:start;">
+      <section class="bank" style="margin:0;">
+        <h2 style="margin:0 0 8px;">1. Bank payment</h2>
+        <p class="muted" style="margin:0 0 12px;">Transfer LKR {{ price }}, then submit your slip reference for verification.</p>
+        <dl>
+          <dt>Bank</dt><dd>{{ bank.bank_name }}</dd>
+          <dt>Account name</dt><dd>{{ bank.account_name }}</dd>
+          <dt>Account number</dt><dd>{{ bank.account_number }}</dd>
+          <dt>Branch</dt><dd>{{ bank.branch }}</dd>
+          {% if bank.swift %}<dt>SWIFT</dt><dd>{{ bank.swift }}</dd>{% endif %}
+          <dt>Amount</dt><dd>LKR {{ price }}</dd>
+        </dl>
+        <form method="post" action="/subscribe/bank" style="margin-top:14px;">
+          <label>Bank slip / transfer reference
+            <input type="text" name="reference" placeholder="TXN / slip number" required>
+          </label>
+          <label>Amount paid (LKR)
+            <input type="number" name="amount" value="{{ price }}" min="{{ price }}" required>
+          </label>
+          <label>Note (optional)
+            <textarea name="note" rows="2" placeholder="Bank used, date/time"></textarea>
+          </label>
+          <button class="secondary" type="submit">Submit bank payment</button>
+        </form>
+      </section>
+
+      <section class="bank" style="margin:0;">
+        <h2 style="margin:0 0 8px;">2. PayHere (card)</h2>
+        <p class="muted" style="margin:0 0 12px;">Pay online with Visa, Mastercard, or local cards. Access unlocks automatically.</p>
+
+        {% if payhere_enabled and not autosubmit_payhere %}
+          <form method="post" action="/subscribe/payhere/start">
+            <label>First name
+              <input type="text" name="first_name" value="{{ checkout_first_name }}" required>
+            </label>
+            <label>Last name
+              <input type="text" name="last_name" value="{{ checkout_last_name }}" required>
+            </label>
+            <label>Phone
+              <input type="tel" name="phone" value="{{ checkout_phone }}" placeholder="07XXXXXXXX" required>
+            </label>
+            <button type="submit">Pay LKR {{ price }} with PayHere</button>
+          </form>
+        {% elif not payhere_enabled %}
+          <div class="error" style="margin:0;">
+            PayHere is not configured yet. Add merchant ID and secret to enable card payments.
+          </div>
+        {% endif %}
+
+        {% if autosubmit_payhere and payhere %}
+          <p class="intro">Redirecting to PayHere…</p>
+          <form id="payhere-form" method="post" action="{{ payhere.checkout_url }}">
+            <input type="hidden" name="merchant_id" value="{{ payhere.merchant_id }}">
+            <input type="hidden" name="return_url" value="{{ payhere.return_url }}">
+            <input type="hidden" name="cancel_url" value="{{ payhere.cancel_url }}">
+            <input type="hidden" name="notify_url" value="{{ payhere.notify_url }}">
+            <input type="hidden" name="order_id" value="{{ payhere.order_id }}">
+            <input type="hidden" name="items" value="CareerSync 30-day subscription">
+            <input type="hidden" name="currency" value="LKR">
+            <input type="hidden" name="amount" value="{{ '%.2f'|format(price) }}">
+            <input type="hidden" name="first_name" value="{{ payhere.first_name }}">
+            <input type="hidden" name="last_name" value="{{ payhere.last_name }}">
+            <input type="hidden" name="email" value="{{ user.email }}">
+            <input type="hidden" name="phone" value="{{ payhere.phone }}">
+            <input type="hidden" name="address" value="Online">
+            <input type="hidden" name="city" value="Colombo">
+            <input type="hidden" name="country" value="Sri Lanka">
+            <input type="hidden" name="hash" value="{{ payhere.hash }}">
+            <button type="submit">Continue to PayHere</button>
+          </form>
+          <script>document.getElementById('payhere-form').submit();</script>
+        {% endif %}
+      </section>
+    </div>
+  {% endif %}
+{% endblock %}
