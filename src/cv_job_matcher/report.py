@@ -100,10 +100,9 @@ def write_outputs(
     (out_dir / "tailored_cv.md").write_text(tailored_cv, encoding="utf-8")
     _write_all_jobs_csv(out_dir / "all_discovered_jobs.csv", jobs)
     contact_by_company = _best_contact_by_company(contact_leads)
-    _write_csv(
+    _write_related_vacancies_csv(
         out_dir / "related_vacancies.csv",
         related_matches,
-        {},
     )
     _write_csv(out_dir / "job_matches.csv", matches, contact_by_company)
     _write_csv(out_dir / "rejected_vacancies.csv", rejected_matches, {})
@@ -307,6 +306,47 @@ def _write_csv(path: Path, matches: list[MatchResult], contact_by_company: dict[
                     contact.profile_image_url if contact else "",
                     contact.source_url if contact else "",
                     contact.search_query if contact else "",
+                    job.url,
+                ]
+            )
+
+
+def _write_related_vacancies_csv(
+    path: Path,
+    matches: list[MatchResult],
+) -> None:
+    """Write pre-LLM vacancy evidence without decision or contact columns."""
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = _FormulaSafeCsvWriter(handle)
+        writer.writerow(
+            [
+                "match_score",
+                "title",
+                "company",
+                "location",
+                "source",
+                "published_at",
+                "fetched_at_utc",
+                "detail_page_verified",
+                "matched_skills",
+                "concerns",
+                "apply_url",
+            ]
+        )
+        for match in matches:
+            job = match.job
+            writer.writerow(
+                [
+                    match.score,
+                    job.title,
+                    job.company,
+                    job.location,
+                    job.source,
+                    job.published_at,
+                    job.fetched_at.isoformat(),
+                    "yes" if job.detail_page_verified else "no",
+                    ", ".join(match.matched_skills),
+                    " ".join(match.concerns),
                     job.url,
                 ]
             )
