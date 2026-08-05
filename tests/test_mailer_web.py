@@ -1,11 +1,12 @@
 from pathlib import Path
 
 from cv_job_matcher.mailer import build_results_message
+from cv_job_matcher.resend_mailer import _RESULT_ATTACHMENTS
 from cv_job_matcher.runner import RunSummary
 from cv_job_matcher.web import _validate_submission, create_app
 
 
-def test_results_email_attaches_all_csv_files(tmp_path: Path) -> None:
+def test_results_email_attaches_only_requested_csv_files(tmp_path: Path) -> None:
     (tmp_path / "job_matches.csv").write_text("title\nAI Engineer\n", encoding="utf-8")
     (tmp_path / "all_discovered_jobs.csv").write_text("title\nAI Engineer\n", encoding="utf-8")
     (tmp_path / "related_vacancies.csv").write_text("title\nAI Engineer\n", encoding="utf-8")
@@ -25,12 +26,10 @@ def test_results_email_attaches_all_csv_files(tmp_path: Path) -> None:
     assert filenames == [
         "all_discovered_jobs.csv",
         "job_matches.csv",
-        "manual_review_vacancies.csv",
-        "rejected_vacancies.csv",
         "related_vacancies.csv",
-        "source_coverage.csv",
     ]
     assert message["To"] == "person@example.com"
+    assert sorted(_RESULT_ATTACHMENTS) == filenames
 
 
 def _make_app(tmp_path: Path):

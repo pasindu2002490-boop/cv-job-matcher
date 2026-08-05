@@ -58,9 +58,6 @@ def build_results_message(recipient: str, summary: RunSummary) -> EmailMessage:
         "all_discovered_jobs.csv",
         "related_vacancies.csv",
         "job_matches.csv",
-        "rejected_vacancies.csv",
-        "manual_review_vacancies.csv",
-        "source_coverage.csv",
     ):
         path = summary.output_dir / filename
         if not path.is_file():
@@ -84,6 +81,10 @@ def send_results_email(
     settings = settings or MailSettings.from_environment()
     message = build_results_message(recipient, summary)
     message["From"] = settings.sender
+    logger.info(
+        "Sending discovered, related, and matched vacancy CSVs to %s",
+        _masked_recipient(recipient),
+    )
     _deliver(message, settings)
     logger.info("Email delivery completed for %s", _masked_recipient(recipient))
 

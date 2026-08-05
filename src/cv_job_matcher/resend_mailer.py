@@ -27,9 +27,6 @@ _RESULT_ATTACHMENTS = (
     "all_discovered_jobs.csv",
     "related_vacancies.csv",
     "job_matches.csv",
-    "rejected_vacancies.csv",
-    "manual_review_vacancies.csv",
-    "source_coverage.csv",
 )
 
 

@@ -102,12 +102,27 @@ def test_all_public_report_csvs_escape_untrusted_formula_cells(
         _assert_formula_safe(_read_rows(tmp_path / name))
 
     match_row = _read_rows(tmp_path / "job_matches.csv")[0]
+    related_row = _read_rows(tmp_path / "related_vacancies.csv")[0]
     assert match_row["title"] == "'  =HYPERLINK(\"https://evil.test\")"
     assert match_row["company"] == "'+Example"
     assert match_row["concerns"] == "' \t+untrusted concern"
     assert match_row["llm_reason"] == "' @untrusted reason"
     assert match_row["hr_contact_name"] == "'@SUM(A1:A2)"
     assert match_row["apply_url"] == normal_url
+    assert list(related_row) == [
+        "match_score",
+        "title",
+        "company",
+        "location",
+        "source",
+        "published_at",
+        "fetched_at_utc",
+        "detail_page_verified",
+        "matched_skills",
+        "concerns",
+        "apply_url",
+    ]
+    assert related_row["apply_url"] == normal_url
 
 
 def test_company_and_contact_csv_writers_use_same_safe_boundary(
