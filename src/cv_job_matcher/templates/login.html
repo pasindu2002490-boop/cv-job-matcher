@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Login · CareerSync{% endblock %}
 {% block content %}
+<div class="page">
   <div class="eyebrow">Welcome back</div>
   <h1>Login</h1>
   <p class="intro">Sign in to run matches, check your free trial, or manage your subscription.</p>
@@ -15,5 +16,6 @@
     </label>
     <button type="submit">Login</button>
   </form>
-  <p class="muted" style="margin-top:18px;">No account? <a href="/register" style="color:#2ad4ff;">Register — {{ free_run_limit }} free matches</a></p>
+  <p class="muted" style="margin-top:18px;">No account? <a class="inline" href="/register">Register — {{ free_run_limit }} free matches</a></p>
+</div>
 {% endblock %}

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Contact us · CareerSync{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="eyebrow">Contact</div>
+  <h1>Contact us</h1>
+  <p class="intro">Questions about plans, payments, or matching results? Send a message — we usually reply within 1–2 business days.</p>
+
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  {% if message %}<div class="ok">{{ message }}</div>{% endif %}
+
+  <div class="pay-grid" style="margin-top:8px;">
+    <section class="pay-panel">
+      <h2>Send a message</h2>
+      <form method="post" action="/contact">
+        <label>Your name
+          <input type="text" name="name" value="{{ form.name }}" required>
+        </label>
+        <label>Email
+          <input type="email" name="email" value="{{ form.email }}" required>
+        </label>
+        <label>Subject
+          <input type="text" name="subject" value="{{ form.subject }}" placeholder="Plans, payment, support…" required>
+        </label>
+        <label>Message
+          <textarea name="message" rows="5" required>{{ form.message }}</textarea>
+        </label>
+        <button type="submit">Send message</button>
+      </form>
+    </section>
+
+    <section class="pay-panel">
+      <h2>Direct contacts</h2>
+      <dl class="bank">
+        <dt>Email</dt>
+        <dd><a class="inline" href="mailto:{{ contact.email }}">{{ contact.email }}</a></dd>
+        {% if contact.phone %}
+        <dt>Phone / WhatsApp</dt>
+        <dd>{{ contact.phone }}</dd>
+        {% endif %}
+        {% if contact.whatsapp_url %}
+        <dt>WhatsApp</dt>
+        <dd><a class="inline" href="{{ contact.whatsapp_url }}" target="_blank" rel="noopener">Chat on WhatsApp</a></dd>
+        {% endif %}
+        <dt>Website</dt>
+        <dd>careersync.best</dd>
+        <dt>Hours</dt>
+        <dd>{{ contact.hours }}</dd>
+      </dl>
+      <div class="actions" style="margin-top:18px;">
+        <a class="btn secondary" href="/pricing">View plans</a>
+        <a class="btn secondary" href="/app">Open matcher</a>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

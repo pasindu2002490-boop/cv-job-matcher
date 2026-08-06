@@ -1,15 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Subscribe · CareerSync{% endblock %}
 {% block content %}
-  <div class="eyebrow">Continue matching</div>
-  <h1>Subscribe to CareerSync</h1>
-  <p class="intro">Your {{ free_run_limit }} free matches are done (or you’re upgrading early). Choose bank transfer or PayHere for 30 days of access.</p>
-  <div class="price">LKR {{ price }}</div>
-  <p class="muted">One subscription · 30 days access</p>
+<div class="page">
+  <div class="eyebrow">Subscribe</div>
+  <h1>Pick a plan &amp; pay</h1>
+  <p class="intro">Choose 1 month or 1 year, then pay by bank transfer or PayHere.</p>
 
   {% if subscription and subscription.status == 'active' %}
     <div class="ok">Your subscription is active until {{ subscription.ends_at }}.</div>
-    <a class="btn" href="/">Go to matcher</a>
+    <a class="btn" href="/app">Go to matcher</a>
   {% else %}
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
     {% if message %}<div class="ok">{{ message }}</div>{% endif %}
@@ -25,24 +24,46 @@
       </div>
     {% endif %}
 
-    <div class="grid-2" style="margin-top:24px;align-items:start;">
-      <section class="bank" style="margin:0;">
-        <h2 style="margin:0 0 8px;">1. Bank payment</h2>
-        <p class="muted" style="margin:0 0 12px;">Transfer LKR {{ price }}, then submit your slip reference for verification.</p>
+    <div class="plan-grid" style="margin:18px 0 8px;">
+      {% for plan in paid_plans %}
+      <article class="plan-card {% if selected_plan == plan.id %}featured{% endif %}">
+        {% if plan.featured %}<div class="plan-ribbon">Best value</div>{% endif %}
+        <h3>{{ plan.name }}</h3>
+        <div class="price">LKR {{ '{:,}'.format(plan.price_lkr) }}</div>
+        <p class="muted">{{ plan.tagline }}</p>
+        <ul class="plan-list">
+          {% for item in plan.features %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+        <a class="btn {% if selected_plan != plan.id %}secondary{% endif %}" href="/subscribe?plan={{ plan.id }}">
+          {% if selected_plan == plan.id %}Selected{% else %}Select {{ plan.name }}{% endif %}
+        </a>
+      </article>
+      {% endfor %}
+    </div>
+
+    <div class="notice">Selected plan: <strong>{{ current_plan.name }}</strong> — LKR {{ '{:,}'.format(current_plan.price_lkr) }} for {{ current_plan.days }} days</div>
+
+    <div class="pay-grid">
+      <section class="pay-panel bank">
+        <h2>1. Bank payment</h2>
+        <p class="muted">Transfer LKR {{ current_plan.price_lkr }}, then submit your slip reference.</p>
         <dl>
           <dt>Bank</dt><dd>{{ bank.bank_name }}</dd>
           <dt>Account name</dt><dd>{{ bank.account_name }}</dd>
           <dt>Account number</dt><dd>{{ bank.account_number }}</dd>
           <dt>Branch</dt><dd>{{ bank.branch }}</dd>
           {% if bank.swift %}<dt>SWIFT</dt><dd>{{ bank.swift }}</dd>{% endif %}
-          <dt>Amount</dt><dd>LKR {{ price }}</dd>
+          <dt>Amount</dt><dd>LKR {{ '{:,}'.format(current_plan.price_lkr) }}</dd>
         </dl>
-        <form method="post" action="/subscribe/bank" style="margin-top:14px;">
+        <form method="post" action="/subscribe/bank">
+          <input type="hidden" name="plan" value="{{ current_plan.id }}">
           <label>Bank slip / transfer reference
             <input type="text" name="reference" placeholder="TXN / slip number" required>
           </label>
           <label>Amount paid (LKR)
-            <input type="number" name="amount" value="{{ price }}" min="{{ price }}" required>
+            <input type="number" name="amount" value="{{ current_plan.price_lkr }}" min="{{ current_plan.price_lkr }}" required>
           </label>
           <label>Note (optional)
             <textarea name="note" rows="2" placeholder="Bank used, date/time"></textarea>
@@ -51,12 +72,13 @@
         </form>
       </section>
 
-      <section class="bank" style="margin:0;">
-        <h2 style="margin:0 0 8px;">2. PayHere (card)</h2>
-        <p class="muted" style="margin:0 0 12px;">Pay online with Visa, Mastercard, or local cards. Access unlocks automatically.</p>
+      <section class="pay-panel">
+        <h2>2. PayHere (card)</h2>
+        <p class="muted">Pay online with Visa, Mastercard, or local cards.</p>
 
         {% if payhere_enabled and not autosubmit_payhere %}
           <form method="post" action="/subscribe/payhere/start">
+            <input type="hidden" name="plan" value="{{ current_plan.id }}">
             <label>First name
               <input type="text" name="first_name" value="{{ checkout_first_name }}" required>
             </label>
@@ -66,10 +88,10 @@
             <label>Phone
               <input type="tel" name="phone" value="{{ checkout_phone }}" placeholder="07XXXXXXXX" required>
             </label>
-            <button type="submit">Pay LKR {{ price }} with PayHere</button>
+            <button type="submit">Pay LKR {{ '{:,}'.format(current_plan.price_lkr) }} with PayHere</button>
           </form>
         {% elif not payhere_enabled %}
-          <div class="error" style="margin:0;">
+          <div class="error">
             PayHere is not configured yet. Add merchant ID and secret to enable card payments.
           </div>
         {% endif %}
@@ -82,9 +104,9 @@
             <input type="hidden" name="cancel_url" value="{{ payhere.cancel_url }}">
             <input type="hidden" name="notify_url" value="{{ payhere.notify_url }}">
             <input type="hidden" name="order_id" value="{{ payhere.order_id }}">
-            <input type="hidden" name="items" value="CareerSync 30-day subscription">
+            <input type="hidden" name="items" value="CareerSync {{ current_plan.name }} subscription">
             <input type="hidden" name="currency" value="LKR">
-            <input type="hidden" name="amount" value="{{ '%.2f'|format(price) }}">
+            <input type="hidden" name="amount" value="{{ payhere.amount }}">
             <input type="hidden" name="first_name" value="{{ payhere.first_name }}">
             <input type="hidden" name="last_name" value="{{ payhere.last_name }}">
             <input type="hidden" name="email" value="{{ user.email }}">
@@ -100,4 +122,5 @@
       </section>
     </div>
   {% endif %}
+</div>
 {% endblock %}

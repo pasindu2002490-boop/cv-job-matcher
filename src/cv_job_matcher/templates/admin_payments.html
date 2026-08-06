@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Admin payments · CareerSync{% endblock %}
 {% block content %}
+<div class="page">
+  <div class="actions" style="margin-bottom:18px;">
+    <a class="btn secondary" href="/admin">Users</a>
+    <a class="btn secondary" href="/admin/payments">Pending payments</a>
+    <a class="btn secondary" href="/admin/feedback">Feedback</a>
+  </div>
   <h1>Pending payments</h1>
   <p class="intro">Activate subscriptions after verifying bank transfers.</p>
   {% if message %}<div class="ok">{{ message }}</div>{% endif %}
@@ -29,7 +35,7 @@
           <td>{{ item.subscription.created_at }}</td>
           <td>
             <form method="post" action="/admin/payments/{{ item.subscription.id }}/activate">
-              <button type="submit">Activate 30 days</button>
+              <button type="submit">Activate</button>
             </form>
           </td>
         </tr>
@@ -37,4 +43,5 @@
       </tbody>
     </table>
   {% endif %}
+</div>
 {% endblock %}

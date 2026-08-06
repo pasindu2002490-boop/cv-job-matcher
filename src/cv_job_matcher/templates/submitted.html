@@ -1,10 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Submitted · CareerSync{% endblock %}
 {% block content %}
+<div class="page">
+  <div class="visual-strip">
+    <img src="{{ url_for('static', filename='hero-art.svg') }}" alt="" width="160" height="120">
+    <div>
+      <strong>Matching in progress</strong>
+      <p>We’re scanning live sources for roles that fit your CV.</p>
+    </div>
+  </div>
   <h1>Your search has started.</h1>
-  <p class="intro">Live job sources can take several minutes. The CSV reports will be emailed to <strong>{{ email }}</strong> when processing finishes.</p>
-  <div id="status" class="ok">Queued&hellip;</div>
-  <a href="/">Submit another CV</a>
+  <p class="intro">Live job sources can take several minutes. CSV reports will be emailed to <strong>{{ email }}</strong> when processing finishes.</p>
+  <div id="status" class="ok">Queued…</div>
+  <div class="actions">
+    <a class="btn secondary" href="/">Submit another CV</a>
+  </div>
   <script>
     const statusUrl = {{ url_for('status', task_id=task_id) | tojson }};
     const statusBox = document.getElementById('status');
@@ -21,4 +31,5 @@
     }
     refresh();
   </script>
+</div>
 {% endblock %}

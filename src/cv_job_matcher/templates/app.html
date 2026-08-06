@@ -1,27 +1,33 @@
 {% extends "base.html" %}
-{% block title %}CareerSync · AI job matching{% endblock %}
+{% block title %}Matcher · CareerSync{% endblock %}
 {% block content %}
-  <div class="eyebrow">AI-powered job search</div>
-  <h1>CareerSync</h1>
-  <p class="intro">Upload your CV, set your target role, and get live vacancy matches emailed as CSV reports.</p>
+<div class="page">
+  <div class="eyebrow">Matcher</div>
+  <h1>Find roles that fit.</h1>
+  <p class="intro">Upload your CV and set a target. We’ll search live vacancies and email CSV reports.</p>
 
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
   {% if not user %}
-    <div class="badge">{{ free_run_limit }} free matches included after signup</div>
-    <div class="ok">Create a free account to try CareerSync {{ free_run_limit }} times. Then subscribe for LKR {{ price }} / 30 days.</div>
+    <div class="ok">Create a free account to try {{ free_run_limit }} matches, then choose a monthly or yearly plan.</div>
     <div class="actions">
-      <a class="btn" href="/register">Start free — {{ free_run_limit }} matches</a>
+      <a class="btn" href="/register">Start free</a>
       <a class="btn secondary" href="/login">Login</a>
-      <a class="btn secondary" href="/subscribe">View pricing</a>
+      <a class="btn secondary" href="/pricing">View plans</a>
     </div>
   {% elif can_match %}
-    {% if subscribed and subscription %}
-      <div class="ok">Subscription active until {{ subscription.ends_at }}.</div>
-    {% else %}
-      <div class="badge">Free trial · {{ free_runs_left }} of {{ free_run_limit }} matches left</div>
-      <div class="ok">Use your free matches first. After that, subscribe for unlimited access for 30 days.</div>
-    {% endif %}
+    <div class="visual-strip">
+      <img src="{{ url_for('static', filename='hero-art.svg') }}" alt="" width="160" height="120">
+      <div>
+        {% if subscribed and subscription %}
+          <strong>Subscription active</strong>
+          <p>Access until {{ subscription.ends_at }}.</p>
+        {% else %}
+          <strong>Free trial · {{ free_runs_left }}/{{ free_run_limit }} left</strong>
+          <p>Use free matches first, then subscribe monthly or yearly.</p>
+        {% endif %}
+      </div>
+    </div>
     <form class="match-form" action="/submit" method="post" enctype="multipart/form-data">
       <label class="full">Your CV
         <input type="file" name="cv" accept=".pdf,.docx,.txt,.md" required>
@@ -47,10 +53,11 @@
     </form>
   {% else %}
     <div class="error">You’ve used your {{ free_run_limit }} free matches. Subscribe to continue matching.</div>
-    <div class="price">LKR {{ price }}</div>
-    <p class="muted">30 days of matching after payment confirmation.</p>
     <div class="actions">
-      <a class="btn" href="/subscribe">Subscribe now</a>
+      <a class="btn" href="/subscribe?plan=monthly">1 month — LKR {{ '{:,}'.format(plans[1].price_lkr) }}</a>
+      <a class="btn secondary" href="/subscribe?plan=yearly">1 year — LKR {{ '{:,}'.format(plans[2].price_lkr) }}</a>
+      <a class="btn secondary" href="/pricing">Compare plans</a>
     </div>
   {% endif %}
+</div>
 {% endblock %}

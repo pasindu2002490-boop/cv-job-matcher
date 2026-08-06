@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Feedback · CareerSync{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="eyebrow">Feedback</div>
+  <h1>Share feedback</h1>
+  <p class="intro">Tell us what worked, what didn’t, or what you’d like next. Your notes help us improve CareerSync.</p>
+
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  {% if message %}<div class="ok">{{ message }}</div>{% endif %}
+
+  <div class="pay-grid" style="margin-top:8px;">
+    <section class="pay-panel">
+      <h2>Send feedback</h2>
+      <form method="post" action="/feedback">
+        <label>Your name
+          <input type="text" name="name" value="{{ form.name }}" required>
+        </label>
+        <label>Email
+          <input type="email" name="email" value="{{ form.email }}" required>
+        </label>
+        <label>Rating
+          <select name="rating" required>
+            <option value="" {% if not form.rating %}selected{% endif %}>Select rating</option>
+            {% for value, label in [('5','Excellent — 5'),('4','Good — 4'),('3','Okay — 3'),('2','Needs work — 2'),('1','Poor — 1')] %}
+            <option value="{{ value }}" {% if form.rating == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Feedback
+          <textarea name="message" rows="5" placeholder="What should we improve or keep?" required>{{ form.message }}</textarea>
+        </label>
+        <button type="submit">Submit feedback</button>
+      </form>
+    </section>
+
+    <section class="pay-panel">
+      <h2>What happens next</h2>
+      <p class="muted">We read every submission. Product feedback may shape matching quality, plans, and the website experience.</p>
+      <div class="actions" style="margin-top:18px;">
+        <a class="btn secondary" href="/contact">Contact support</a>
+        <a class="btn secondary" href="/app">Back to matcher</a>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Pricing · CareerSync{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="eyebrow">Pricing</div>
+  <h1>Choose your plan</h1>
+  <p class="intro">Start with {{ free_run_limit }} free matches after signup. Then pick monthly or yearly access.</p>
+
+  <div class="plan-grid" style="margin-top:22px;">
+    {% for plan in plans %}
+    <article class="plan-card {% if plan.featured %}featured{% endif %}">
+      {% if plan.featured %}<div class="plan-ribbon">Best value</div>{% endif %}
+      <h3>{{ plan.name }}</h3>
+      <div class="price">LKR {{ '{:,}'.format(plan.price_lkr) }}</div>
+      <p class="muted">{{ plan.tagline }}</p>
+      <ul class="plan-list">
+        {% for item in plan.features %}
+        <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+      {% if plan.id != 'free' %}
+        <p class="muted" style="font-size:.92rem;">Duration: {{ plan.days }} days · Pay by bank transfer or PayHere card.</p>
+      {% endif %}
+      <a class="btn {% if not plan.featured %}secondary{% endif %}" href="{{ plan.cta_href }}">{{ plan.cta_label }}</a>
+    </article>
+    {% endfor %}
+  </div>
+
+  <div class="visual-strip" style="margin-top:28px;">
+    <img src="{{ url_for('static', filename='hero-art.svg') }}" alt="" width="160" height="120">
+    <div>
+      <strong>Need a custom plan?</strong>
+      <p>Teams or longer commitments — message us and we’ll help.</p>
+    </div>
+  </div>
+  <div class="actions">
+    <a class="btn secondary" href="/contact">Contact us</a>
+    <a class="btn secondary" href="/">Back to home</a>
+  </div>
+</div>
+{% endblock %}
