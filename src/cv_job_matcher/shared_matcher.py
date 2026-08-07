@@ -10,6 +10,7 @@ from .agent_graph import SourceAgentTrace
 from .country import normalize_country
 from .cv_parser import parse_cv, read_cv
 from .cv_writer import build_tailored_cv
+from .confidence_router import route_by_confidence
 from .job_sources import job_title_matches_profile
 from .llm_filter import ReviewCheckpointStore, apply_llm_filter
 from .matcher import (
@@ -38,6 +39,7 @@ class SharedInventoryMatchOptions:
     llm_provider: str = "groq"
     llm_batch_size: int = 5
     source_metadata: Mapping[str, str] | None = None
+    source_traces: Sequence[SourceAgentTrace] | None = None
 
 
 def run_shared_inventory_match(
@@ -56,10 +58,9 @@ def run_shared_inventory_match(
         raise ValueError("A target position is required")
     country = normalize_country(options.country)
     discovered_jobs = list(options.jobs)
-    source_traces = _snapshot_source_traces(
-        discovered_jobs,
-        options.source_metadata or {},
-    )
+    source_traces = list(options.source_traces or _snapshot_source_traces(
+        discovered_jobs, options.source_metadata or {}
+    ))
     provider_notes = [
         (
             "Shared inventory: the task uses an immutable database snapshot; "
@@ -111,34 +112,49 @@ def run_shared_inventory_match(
         source_traces=source_traces,
     )
 
-    rejected_matches: list[MatchResult] = []
+    route = route_by_confidence(profile, related_matches)
+    matches = list(route.accepted)
+    rejected_matches: list[MatchResult] = list(route.rejected)
     manual_review_matches: list[MatchResult] = []
     completed_reviews: list[MatchResult] = []
+    provider_notes.append(
+        "Confidence router: "
+        f"{len(route.accepted)} accepted deterministically, "
+        f"{len(route.rejected)} rejected deterministically, and "
+        f"{len(route.ambiguous)} sent to the LLM"
+    )
     try:
-        matches, llm_note = apply_llm_filter(
-            profile,
-            related_matches,
-            enabled=True,
-            model=options.llm_model,
-            limit=max(1, len(related_matches)),
-            provider=options.llm_provider,
-            strict=True,
-            batch_size=options.llm_batch_size,
-            country=country,
-            allow_global_remote=options.include_remote_global,
-            rejected_audit=rejected_matches,
-            manual_review_audit=manual_review_matches,
-            completed_audit=completed_reviews,
-            checkpoint_store=checkpoint_store,
-        )
+        if route.ambiguous:
+            llm_matches, llm_note = apply_llm_filter(
+                profile,
+                list(route.ambiguous),
+                enabled=True,
+                model=options.llm_model,
+                limit=len(route.ambiguous),
+                provider=options.llm_provider,
+                strict=True,
+                batch_size=options.llm_batch_size,
+                country=country,
+                allow_global_remote=options.include_remote_global,
+                rejected_audit=rejected_matches,
+                manual_review_audit=manual_review_matches,
+                completed_audit=completed_reviews,
+                checkpoint_store=checkpoint_store,
+            )
+            matches.extend(llm_matches)
+        else:
+            llm_note = "LLM review skipped: every related vacancy had a high-confidence deterministic route"
     except Exception:
-        partial_matches = [
+        partial_matches = [*route.accepted, *[
             match for match in completed_reviews if match.llm_decision == "keep"
-        ]
+        ]]
         partial_rejected = [
+            *route.rejected,
+            *[
             match
             for match in completed_reviews
             if match.llm_decision in {"reject", "maybe"}
+            ],
         ]
         partial_manual = [
             match
@@ -254,4 +270,3 @@ def _snapshot_source_traces(
 def _audit_key(match: MatchResult) -> tuple[str, str, str, str, str]:
     job = match.job
     return job.source, job.source_id, job.url, job.title, job.company
-
