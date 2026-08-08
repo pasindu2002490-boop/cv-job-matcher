@@ -43,10 +43,7 @@ def main() -> int:
             web_discovery=True,
         )
     )
-    print(
-        f"Attempting {len(graph.providers)} configured source agents for "
-        f"{args.position!r} in {args.country}..."
-    )
+    print(f"Starting user-specific discovery for {args.position!r} in {args.country}...")
     discovery = graph.run(profile, normalize_country(args.country))
     jobs = discovery.jobs
     productive = sum(

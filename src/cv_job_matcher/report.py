@@ -104,7 +104,7 @@ def write_outputs(
         out_dir / "related_vacancies.csv",
         related_matches,
     )
-    _write_csv(out_dir / "job_matches.csv", matches, contact_by_company)
+    _write_related_vacancies_csv(out_dir / "job_matches.csv", matches)
     _write_csv(out_dir / "rejected_vacancies.csv", rejected_matches, {})
     _write_csv(
         out_dir / "manual_review_vacancies.csv",

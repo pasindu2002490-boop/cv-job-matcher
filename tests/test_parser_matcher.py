@@ -248,6 +248,10 @@ def test_freshness_filter_still_rejects_expired_current_inventory_rows():
             "CareerLK",
             "Fetched today from a current listing and validated detail page.",
         ),
+        (
+            "IFS Sri Lanka Careers",
+            "Still returned by the employer's complete official inventory API.",
+        ),
     ],
 )
 def test_live_inventory_job_is_not_expired_by_old_publication_date_alone(

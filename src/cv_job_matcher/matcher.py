@@ -98,6 +98,18 @@ CURRENT_OPEN_INVENTORY_SOURCES = {
     "topjobs.lk",
     "We Work Remotely",
     "XpressJobs",
+    # Official company feeds below enumerate the employer's current public
+    # inventory. Continued presence is stronger than the original post date.
+    "IFS Sri Lanka Careers",
+    "Infor Sri Lanka Careers",
+    "Bistec Global Careers",
+    "3CS Careers",
+    "Rootcode Careers",
+    "Pearson Sri Lanka Careers",
+    "MillenniumIT ESP Careers",
+    "John Keells IT Careers",
+    "Deloitte Sri Lanka Technology Careers",
+    "Acumatica Sri Lanka Careers",
 }
 
 

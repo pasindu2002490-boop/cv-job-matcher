@@ -106,9 +106,9 @@ def test_all_public_report_csvs_escape_untrusted_formula_cells(
     assert match_row["title"] == "'  =HYPERLINK(\"https://evil.test\")"
     assert match_row["company"] == "'+Example"
     assert match_row["concerns"] == "' \t+untrusted concern"
-    assert match_row["llm_reason"] == "' @untrusted reason"
-    assert match_row["hr_contact_name"] == "'@SUM(A1:A2)"
     assert match_row["apply_url"] == normal_url
+    assert "llm_reason" not in match_row
+    assert "hr_contact_name" not in match_row
     assert list(related_row) == [
         "match_score",
         "title",

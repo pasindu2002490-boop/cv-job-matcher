@@ -16,6 +16,7 @@ from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from .job_sources import AdzunaProvider, JobProvider, default_providers
+from .it_company_sources import is_it_position, it_company_career_providers
 from .models import CandidateProfile, Job
 
 logger = logging.getLogger(__name__)
@@ -204,6 +205,7 @@ class VerticalJobAgentGraph:
         options: AgentGraphOptions,
         providers: list[JobProvider] | None = None,
     ) -> None:
+        self._uses_default_providers = providers is None
         self.options = options
         self.providers = providers if providers is not None else default_providers()
         # Capture constructor/configuration state before providers add runtime
@@ -303,12 +305,18 @@ class VerticalJobAgentGraph:
         country: str,
     ) -> AgentGraphState:
         state = AgentGraphState(profile=discovery_profile, country=country)
+        run_providers = list(self.providers)
+        if self._uses_default_providers and is_it_position(discovery_profile.target_position):
+            run_providers.extend(it_company_career_providers())
+            state.notes.append(
+                "IT career-page routing: activated 100 Sri Lankan technology-company sources"
+            )
         logger.info(
             "Root agent: profile extracted; dispatching %d concurrent source nodes",
-            len(self.providers),
+            len(run_providers),
         )
         workers = min(
-            len(self.providers),
+            len(run_providers),
             max(1, int(os.getenv("SOURCE_AGENT_WORKERS", "8"))),
         )
         results: dict[int, AgentGraphState] = {}
@@ -318,12 +326,12 @@ class VerticalJobAgentGraph:
                     SourceAgent(provider, self.options).run,
                     AgentGraphState(profile=discovery_profile, country=country),
                 ): index
-                for index, provider in enumerate(self.providers)
+                for index, provider in enumerate(run_providers)
             }
             for future in as_completed(futures):
                 results[futures[future]] = future.result()
         # Merge in configured provider order so CSVs and audits are reproducible.
-        for index in range(len(self.providers)):
+        for index in range(len(run_providers)):
             result = results[index]
             state.jobs.extend(result.jobs)
             state.notes.extend(result.notes)

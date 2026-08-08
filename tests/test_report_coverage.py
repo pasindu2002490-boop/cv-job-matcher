@@ -122,8 +122,11 @@ def test_outputs_preserve_run_coverage_and_llm_rejections(tmp_path: Path):
 
     with (tmp_path / "job_matches.csv").open(newline="", encoding="utf-8") as handle:
         kept_rows = list(csv.DictReader(handle))
-    assert kept_rows[0]["llm_provider"] == "Groq"
-    assert kept_rows[0]["llm_model"] == "openai/gpt-oss-20b"
+    assert list(kept_rows[0]) == [
+        "match_score", "title", "company", "location", "source",
+        "published_at", "fetched_at_utc", "detail_page_verified",
+        "matched_skills", "concerns", "apply_url",
+    ]
 
     audit = (tmp_path / "source_audit.md").read_text(encoding="utf-8")
     assert "- All discovered vacancies: 3" in audit
